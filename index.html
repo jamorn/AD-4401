@@ -3,39 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Auto-Fill Scale OCR & Verify</title>
+    <title>Scale OCR - Dual Mode (Auto & Manual)</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-950 text-white min-h-screen flex flex-col items-center justify-center p-4 select-none">
 
-    <!-- Main Container -->
     <div class="w-full max-w-md bg-gray-900 p-6 rounded-2xl shadow-2xl border border-gray-800">
         <header class="flex items-center justify-between mb-4 border-b border-gray-800 pb-3">
             <h1 class="text-lg font-bold text-green-400 flex items-center gap-2">
-                <span>⚖️</span> บันทึกน้ำหนักอัตโนมัติ
+                <span>⚖️</span> ระบบบันทึกน้ำหนัก
             </h1>
-            <span id="scanStatus" class="text-xs font-mono bg-yellow-500/20 text-yellow-300 px-2.5 py-1 rounded-full border border-yellow-500/30 animate-pulse">
-                🔍 กำลังสแกน...
-            </span>
+            <!-- ตัวเลือกโหมดการทำงาน -->
+            <select id="modeSelect" class="bg-gray-800 text-xs text-green-300 font-mono px-2 py-1 rounded border border-gray-700 focus:outline-none">
+                <option value="auto">⚡ โหมด: Auto-Stable</option>
+                <option value="manual">🔘 โหมด: Manual Accept</option>
+            </select>
         </header>
 
-        <!-- CAMERA & LIVE GUIDE BOX -->
-        <div class="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700 mb-5 shadow-inner flex flex-col items-center justify-center">
+        <!-- CAMERA & LIVE STREAM BOX -->
+        <div class="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700 mb-4 shadow-inner flex flex-col items-center justify-center">
             <video id="video" autoplay playsinline class="w-full h-full object-cover"></video>
             
             <!-- กรอบเป้าหมาย (Target ROI Box) -->
             <div class="absolute inset-x-8 inset-y-1/3 border-2 border-dashed border-green-400 rounded-lg pointer-events-none flex items-end justify-center pb-1 bg-green-500/5">
-                <span class="bg-black/80 text-green-300 text-[11px] px-2 py-0.5 rounded font-mono tracking-wide">
-                    วางตัวเลขเครื่องชั่งในกรอบนี้
+                <span id="guideLabel" class="bg-black/80 text-green-300 text-[11px] px-2 py-0.5 rounded font-mono tracking-wide">
+                    กำลังอ่านค่า Real-time...
                 </span>
             </div>
+
+            <!-- แสดงค่า Real-time บนมุมจอกล้อง -->
+            <div class="absolute top-3 right-3 bg-black/70 backdrop-blur-md px-3 py-1 rounded-lg border border-green-500/30 flex items-center gap-2">
+                <span id="liveIndicator" class="w-2.5 h-2.5 rounded-full bg-yellow-400 animate-ping"></span>
+                <span id="liveValue" class="text-lg font-mono font-bold text-green-400">0.00</span>
+            </div>
+        </div>
+
+        <!-- MANUAL ACCEPT BUTTON (แสดงเฉพาะตอนเลือกโหมด Manual) -->
+        <div id="manualControlContainer" class="hidden mb-4">
+            <button id="acceptBtn" class="w-full bg-amber-600 hover:bg-amber-500 active:scale-[0.98] py-3 rounded-xl font-bold text-white transition shadow-lg flex items-center justify-center gap-2">
+                <span>📥</span> กดรับค่านี้ (Accept / OK)
+            </button>
         </div>
 
         <!-- VERIFY & SUBMIT FORM -->
         <div class="flex flex-col gap-4">
             <div class="flex flex-col gap-1.5">
                 <label for="weightInput" class="text-sm text-gray-300 font-medium flex justify-between">
-                    <span>ค่าน้ำหนักที่อ่านได้ (ตรวจสอบก่อนกดส่ง):</span>
+                    <span>ค่าน้ำหนักที่ดึงเข้าฟอร์ม (Verify):</span>
                     <span class="text-green-400 font-mono text-xs">หน่วย: kg</span>
                 </label>
                 <input 
@@ -43,18 +57,18 @@
                     id="weightInput" 
                     step="0.01" 
                     inputmode="decimal"
-                    placeholder="รอค่านิ่ง..."
+                    placeholder="รอน้ำหนักนิ่ง..."
                     class="w-full text-4xl font-mono text-center bg-gray-950 border-2 border-green-500 rounded-xl py-3 px-4 text-green-300 font-bold focus:outline-none focus:ring-2 focus:ring-green-400"
                 >
             </div>
 
             <button id="submitBtn" class="w-full bg-green-600 hover:bg-green-500 active:scale-[0.98] py-3.5 rounded-xl font-bold text-white transition shadow-lg text-lg flex items-center justify-center gap-2">
-                <span>✅</span> ยืนยันส่งข้อมูล
+                <span>✅</span> ยืนยันส่งข้อมูลเข้าระบบ
             </button>
         </div>
 
         <p id="statusMsg" class="text-center text-xs text-gray-400 mt-4 font-mono min-h-[1rem]">
-            หันกล้องไปที่หน้าจอเครื่องชั่ง ระบบจะดึงค่าอัตโนมัติเมื่อนิ่ง
+            โหมด Auto: ระบบจะดึงค่าลงฟอร์มให้อัตโนมัติเมื่อค่านิ่ง
         </p>
     </div>
 
@@ -66,7 +80,7 @@
             </div>
             <h2 class="text-xl font-bold text-white mb-2">บันทึกข้อมูลสำเร็จ</h2>
             <p class="text-gray-300 text-base mb-6">
-                ค่าที่ส่งคือ <span id="modalWeightValue" class="text-2xl font-mono font-bold text-green-400 mx-1">0.00</span> kg
+                ค่าน้ำหนักที่ส่งคือ <span id="modalWeightValue" class="text-2xl font-mono font-bold text-green-400 mx-1">0.00</span> kg
             </p>
             <button id="closeModalBtn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl transition shadow-lg">
                 ตกลง (เริ่มรอบถัดไป)
@@ -74,30 +88,32 @@
         </div>
     </div>
 
-    <!-- Canvas ซ่อนไว้สำหรับตัดภาพประมวลผล -->
-    <canvas id="hiddenCanvas" class="hidden"></canvas>
-
     <script>
         const els = {
             video: document.getElementById('video'),
-            hiddenCanvas: document.getElementById('hiddenCanvas'),
+            modeSelect: document.getElementById('modeSelect'),
+            liveValue: document.getElementById('liveValue'),
+            liveIndicator: document.getElementById('liveIndicator'),
+            guideLabel: document.getElementById('guideLabel'),
+            manualControlContainer: document.getElementById('manualControlContainer'),
+            acceptBtn: document.getElementById('acceptBtn'),
             weightInput: document.getElementById('weightInput'),
             statusMsg: document.getElementById('statusMsg'),
-            scanStatus: document.getElementById('scanStatus'),
             submitBtn: document.getElementById('submitBtn'),
             successModal: document.getElementById('successModal'),
             modalWeightValue: document.getElementById('modalWeightValue'),
             closeModalBtn: document.getElementById('closeModalBtn')
         };
 
-        let isDetected = false;
+        let currentMode = 'auto'; // 'auto' หรือ 'manual'
+        let lastValue = null;
+        let stableCount = 0;
+        let isCapturedToInput = false;
 
         // 1. เปิดกล้อง
         async function initCamera() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { exact: 'environment' } }
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: 'environment' } } });
                 els.video.srcObject = stream;
             } catch {
                 try {
@@ -107,36 +123,70 @@
                     els.statusMsg.textContent = "⚠️ ไม่สามารถเปิดกล้องได้";
                 }
             }
-            // เริ่มจำลองกระบวนการสแกนอัตโนมัติทุกๆ 1.5 วินาที
-            setInterval(autoScanLoop, 1500);
         }
 
-        // 2. จำลอง Loop การสแกนอัตโนมัติ (Auto-Scan Background Loop)
-        function autoScanLoop() {
-            if (isDetected) return; // ถ้าจับค่าได้แล้ว ให้หยุดสแกนชั่วคราวรอให้คน Verify/Submit
+        // เปลี่ยนโหมดการทำงาน
+        els.modeSelect.addEventListener('change', (e) => {
+            currentMode = e.target.value;
+            isCapturedToInput = false;
+            els.weightInput.value = "";
+            if (currentMode === 'manual') {
+                els.manualControlContainer.classList.remove('hidden');
+                els.statusMsg.textContent = "โหมด Manual: รอจนค่าคงที่ แล้วกดปุ่ม 'กดรับค่านี้'";
+            } else {
+                els.manualControlContainer.classList.add('hidden');
+                els.statusMsg.textContent = "โหมด Auto: ระบบจะดึงค่าลงฟอร์มให้อัตโนมัติเมื่อค่านิ่ง";
+            }
+        });
 
-            const video = els.video;
-            if (!video.videoWidth) return;
+        // 2. จำลอง Loop อ่านค่า Real-time จากกล้อง (OCR Simulation)
+        function simulateRealtimeOCR() {
+            if (isCapturedToInput) return; // ถ้าดึงค่าลงฟอร์มแล้ว รอจนกว่าจะกด Submit
 
-            // จำลองการอ่านค่า OCR จากกรอบ (ในระบบจริง ตรงนี้นำภาพจาก Canvas ไปรัน OCR)
-            // สมมติว่าเมื่อกล้องนิ่ง ระบบอ่านค่าได้ "91.30"
-            const simulatedDetectedValue = "91.30"; 
+            // สมมติตัวเลขวิ่งจำลอง (ในหน้างานจริงตรงนี้คือผลลัพธ์จาก OCR ที่อ่านจากกรอบ)
+            // ให้จำลองว่าถ้าวางของ น้ำหนักจะวิ่งไปหยุดที่ 91.30 kg
+            const mockValues = ["0.00", "15.40", "45.80", "78.20", "91.30", "91.30", "91.30", "91.30"];
+            const randomVal = mockValues[Math.floor(Math.random() * mockValues.length)];
 
-            // เติมลง Input อัตโนมัติ
-            els.weightInput.value = simulatedDetectedValue;
-            isDetected = true;
+            els.liveValue.textContent = randomVal;
 
-            // เปลี่ยนสถานะ UI เป็นเจอค่าแล้ว
-            els.scanStatus.textContent = "🎯 อ่านค่าสำเร็จ (โปรดตรวจสอบ)";
-            els.scanStatus.className = "text-xs font-mono bg-green-500/20 text-green-300 px-2.5 py-1 rounded-full border border-green-500/30";
-            els.statusMsg.textContent = "ตรวจสอบความถูกต้อง หากไม่ถูกให้ขยับกล้องส่องใหม่";
+            if (currentMode === 'auto') {
+                // Logic ตรวจสอบความนิ่งอัตโนมัติ (Auto-Stable)
+                if (randomVal === lastValue) {
+                    stableCount++;
+                    if (stableCount >= 3) { // ถ้านิ่งติดต่อกัน 3 รอบ (ประมาณ 1.5 วินาที)
+                        els.weightInput.value = randomVal;
+                        isCapturedToInput = true;
+                        els.liveIndicator.className = "w-2.5 h-2.5 rounded-full bg-green-500";
+                        els.guideLabel.textContent = "✅ ค่าคงที่ ดึงลงฟอร์มแล้ว!";
+                        els.statusMsg.textContent = "ตรวจสอบความถูกต้องในฟอร์ม แล้วกดยืนยันส่งข้อมูล";
+                    }
+                } else {
+                    stableCount = 0;
+                    lastValue = randomVal;
+                    els.liveIndicator.className = "w-2.5 h-2.5 rounded-full bg-yellow-400 animate-ping";
+                    els.guideLabel.textContent = "กำลังรอน้ำหนักนิ่ง...";
+                }
+            } else {
+                // โหมด Manual: แค่อัปเดตค่าโชว์ รอคนกด Accept เอง
+                lastValue = randomVal;
+            }
         }
 
-        // 3. ปุ่มกด Submit
-        function handleSubmit() {
+        // ปุ่มกด Accept สำหรับโหมด Manual
+        els.acceptBtn.addEventListener('click', () => {
+            if (!lastValue) return;
+            els.weightInput.value = lastValue;
+            isCapturedToInput = true;
+            els.guideLabel.textContent = "✅ กดรับค่าเรียบร้อย";
+            els.statusMsg.textContent = "ตรวจสอบความถูกต้องในฟอร์ม แล้วกดยืนยันส่งข้อมูล";
+        });
+
+        // 3. ปุ่มกด Submit ส่งข้อมูล
+        els.submitBtn.addEventListener('click', () => {
             const rawValue = parseFloat(els.weightInput.value);
             if (isNaN(rawValue) || rawValue <= 0) {
-                alert("กรุณารอระบบอ่านค่า หรือระบุค่าน้ำหนักให้ถูกต้อง");
+                alert("ยังไม่มีค่าน้ำหนักในฟอร์ม หรือค่าไม่ถูกต้อง");
                 return;
             }
 
@@ -144,27 +194,8 @@
             els.modalWeightValue.textContent = formattedWeight;
             els.successModal.classList.remove('hidden');
             els.successModal.classList.add('flex');
+        });
 
-            // TODO: ส่งค่า formattedWeight ไป Firebase ตรงนี้
-        }
-
-        // 4. ปิด Modal แล้วรีเซ็ตระบบให้พร้อมสแกนรอบใหม่
-        function handleCloseModal() {
-            els.successModal.classList.add('hidden');
-            els.successModal.classList.remove('flex');
-            
-            // รีเซ็ตสถานะให้กลับไปสแกนใหม่
-            isDetected = false;
-            els.weightInput.value = "";
-            els.scanStatus.textContent = "🔍 กำลังสแกน...";
-            els.scanStatus.className = "text-xs font-mono bg-yellow-500/20 text-yellow-300 px-2.5 py-1 rounded-full border border-yellow-500/30 animate-pulse";
-            els.statusMsg.textContent = "หันกล้องไปที่หน้าจอเครื่องชั่ง ระบบจะดึงค่าอัตโนมัติเมื่อนิ่ง";
-        }
-
-        els.submitBtn.addEventListener('click', handleSubmit);
-        els.closeModalBtn.addEventListener('click', handleCloseModal);
-
-        initCamera();
-    </script>
-</body>
-</html>
+        // 4. ปิด Modal รีเซ็ตค่ารอบใหม่
+        els.closeModalBtn.addEventListener('click', () => {
+            els.successModal.
