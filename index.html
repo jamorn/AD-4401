@@ -3,70 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Multi-Scale OCR & Verify</title>
+    <title>Universal Scale OCR - Continuous ROI</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-950 text-white min-h-screen flex flex-col items-center justify-center p-4 select-none">
 
-    <div class="w-full max-w-md bg-gray-900 p-6 rounded-2xl shadow-2xl border border-gray-800">
-        <header class="flex flex-col gap-3 mb-4 border-b border-gray-800 pb-3">
-            <div class="flex items-center justify-between">
-                <h1 class="text-lg font-bold text-green-400 flex items-center gap-2">
-                    <span>⚖️</span> ระบบบันทึกน้ำหนักหลายรุ่น
-                </h1>
-                <!-- โหมด Auto / Manual -->
-                <select id="modeSelect" class="bg-gray-800 text-xs text-green-300 font-mono px-2 py-1 rounded border border-gray-700 focus:outline-none cursor-pointer">
-                    <option value="auto">⚡ Auto-Stable</option>
-                    <option value="manual">🔘 Manual</option>
-                </select>
-            </div>
-
-            <!-- Dropdown เลือกยี่ห้อเครื่องชั่ง (ตั้ง AD-4401 เป็น Default) -->
-            <div class="flex items-center justify-between bg-gray-950 p-2.5 rounded-xl border border-gray-800">
-                <span class="text-xs text-gray-400 font-mono">เลือกเครื่องชั่งหน้างาน:</span>
-                <select id="scaleModelSelect" class="bg-gray-800 text-xs text-emerald-400 font-mono font-bold px-2.5 py-1 rounded border border-gray-700 focus:outline-none cursor-pointer">
-                    <option value="ad4401" selected>A&D AD-4401 (จอเขียวยาว)</option>
-                    <option value="sartorius">Sartorius Miras (จอส้มกว้าง)</option>
-                </select>
-            </div>
+    <div class="w-full max-w-md bg-gray-900 p-5 rounded-2xl shadow-2xl border border-gray-800 flex flex-col gap-4">
+        <header class="flex items-center justify-between border-b border-gray-800 pb-3">
+            <h1 class="text-base font-bold text-green-400 flex items-center gap-2">
+                <span>⚖️</span> ระบบบันทึกน้ำหนักอัจฉริยะ
+            </h1>
+            <select id="modeSelect" class="bg-gray-800 text-xs text-green-300 font-mono px-2 py-1 rounded border border-gray-700 focus:outline-none cursor-pointer">
+                <option value="auto">⚡ Auto-Stable</option>
+                <option value="manual">🔘 Manual Accept</option>
+            </select>
         </header>
 
-        <!-- CAMERA & DYNAMIC GUIDE BOX -->
-        <div class="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700 mb-4 shadow-inner flex flex-col items-center justify-center">
+        <!-- CAMERA & ADJUSTABLE ROI BOX -->
+        <div class="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700 shadow-inner flex flex-col items-center justify-center">
             <video id="video" autoplay playsinline class="w-full h-full object-cover"></video>
             
-            <!-- กรอบเป้าหมาย (Dynamic ROI Box) -->
-            <div id="dynamicGuideBox" class="absolute border-2 border-dashed border-green-400 rounded-lg pointer-events-none flex items-end justify-center pb-1 bg-green-500/5 transition-all duration-300">
-                <span id="guideLabel" class="bg-black/80 text-green-300 text-[11px] px-2 py-0.5 rounded font-mono tracking-wide">
-                    A&D: เล็งกรอบจอเขียว
+            <!-- กรอบสี่เหลี่ยมอิสระ (ROI Box) สำหรับโฟกัสจุดทศนิยมและตัวเลข -->
+            <div id="roiBox" class="absolute border-2 border-dashed border-green-400 rounded-lg pointer-events-none flex items-end justify-center pb-1 bg-green-500/10 transition-all duration-100 shadow-lg">
+                <span class="bg-black/80 text-green-300 text-[10px] px-2 py-0.5 rounded font-mono tracking-wide">
+                    🎯 จัดกรอบให้จุด (.) และตัวเลขอยู่ข้างใน
                 </span>
             </div>
 
-            <!-- แสดงค่า Real-time ที่มุมบนขวา -->
+            <!-- แสดงค่า Real-time ที่อ่านได้จากกรอบ -->
             <div class="absolute top-3 right-3 bg-black/80 backdrop-blur-md px-3 py-1 rounded-lg border border-green-500/30 flex items-center gap-2 shadow-lg">
                 <span id="liveIndicator" class="w-2.5 h-2.5 rounded-full bg-yellow-400 animate-ping"></span>
                 <span id="liveValue" class="text-lg font-mono font-bold text-green-400">0.00</span>
             </div>
         </div>
 
-        <!-- MANUAL ACCEPT BUTTON -->
-        <div id="manualControlContainer" class="hidden mb-4">
+        <!-- แผงควบคุมปรับขนาดกรอบ (Resize Controls) -->
+        <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 flex flex-col gap-2">
+            <div class="flex items-center justify-between text-xs text-gray-400 font-mono">
+                <span>🎛️ ปรับขนาดกรอบ (กว้าง x สูง):</span>
+                <span id="boxDimensionDisplay" class="text-green-400 font-bold">W: 80% | H: 25%</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="flex items-center gap-1">
+                    <span class="text-gray-500 font-mono">กว้าง:</span>
+                    <button onclick="adjustBoxSize('w', -5)" class="bg-gray-800 hover:bg-gray-700 px-2.5 py-1 rounded font-bold">-</button>
+                    <button onclick="adjustBoxSize('w', 5)" class="bg-gray-800 hover:bg-gray-700 px-2.5 py-1 rounded font-bold">+</button>
+                </div>
+                <div class="flex items-center gap-1 justify-end">
+                    <span class="text-gray-500 font-mono">สูง:</span>
+                    <button onclick="adjustBoxSize('h', -5)" class="bg-gray-800 hover:bg-gray-700 px-2.5 py-1 rounded font-bold">-</button>
+                    <button onclick="adjustBoxSize('h', 5)" class="bg-gray-800 hover:bg-gray-700 px-2.5 py-1 rounded font-bold">+</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MANUAL ACCEPT BUTTON (แสดงเฉพาะโหมด Manual) -->
+        <div id="manualControlContainer" class="hidden">
             <button id="acceptBtn" class="w-full bg-amber-600 hover:bg-amber-500 active:scale-[0.98] py-3 rounded-xl font-bold text-white transition shadow-lg flex items-center justify-center gap-2">
                 <span>📥</span> กดรับค่าน้ำหนักนี้ (Accept / OK)
             </button>
         </div>
 
         <!-- VERIFY & SUBMIT FORM -->
-        <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-3">
             <div class="bg-gray-950 border border-gray-800 rounded-xl p-3 flex items-center justify-between">
                 <span class="text-xs text-gray-400 font-mono">ค่าที่อ่านล่าสุด (Last Read):</span>
                 <span id="lastReadDisplay" class="text-xl font-mono font-bold text-amber-400">--.-- kg</span>
             </div>
 
-            <div class="flex flex-col gap-1.5">
-                <label for="weightInput" class="text-sm text-gray-300 font-medium flex justify-between">
-                    <span>ค่าน้ำหนักในฟอร์ม (Verify):</span>
-                    <span class="text-green-400 font-mono text-xs">หน่วย: kg</span>
+            <div class="flex flex-col gap-1">
+                <label for="weightInput" class="text-xs text-gray-300 font-medium flex justify-between">
+                    <span>ค่าน้ำหนักในฟอร์ม (ตรวจสอบ / แก้ไขได้):</span>
+                    <span class="text-green-400 font-mono text-[11px]">หน่วย: kg</span>
                 </label>
                 <input 
                     type="number" 
@@ -74,17 +82,17 @@
                     step="0.001" 
                     inputmode="decimal"
                     placeholder="รอน้ำหนักนิ่ง..."
-                    class="w-full text-4xl font-mono text-center bg-gray-950 border-2 border-green-500 rounded-xl py-3 px-4 text-green-300 font-bold focus:outline-none focus:ring-2 focus:ring-green-400"
+                    class="w-full text-3xl font-mono text-center bg-gray-950 border-2 border-green-500 rounded-xl py-2.5 px-3 text-green-300 font-bold focus:outline-none focus:ring-2 focus:ring-green-400"
                 >
             </div>
 
-            <button id="submitBtn" class="w-full bg-green-600 hover:bg-green-500 active:scale-[0.98] py-3.5 rounded-xl font-bold text-white transition shadow-lg text-lg flex items-center justify-center gap-2">
+            <button id="submitBtn" class="w-full bg-green-600 hover:bg-green-500 active:scale-[0.98] py-3 rounded-xl font-bold text-white transition shadow-lg text-base flex items-center justify-center gap-2">
                 <span>✅</span> ยืนยันส่งข้อมูลเข้าระบบ
             </button>
         </div>
 
         <p id="statusMsg" class="text-center text-xs text-gray-400 mt-4 font-mono min-h-[1rem]">
-            พร้อมใช้งานสำหรับ A&D AD-4401
+            ปรับขนาดกรอบคลุมตัวเลข ระบบจะอ่านค่าต่อเนื่องให้อัตโนมัติ
         </p>
     </div>
 
@@ -107,14 +115,13 @@
     <script>
         const els = {
             video: document.getElementById('video'),
+            roiBox: document.getElementById('roiBox'),
+            boxDimensionDisplay: document.getElementById('boxDimensionDisplay'),
             modeSelect: document.getElementById('modeSelect'),
-            scaleModelSelect: document.getElementById('scaleModelSelect'),
-            dynamicGuideBox: document.getElementById('dynamicGuideBox'),
-            guideLabel: document.getElementById('guideLabel'),
-            liveValue: document.getElementById('liveValue'),
-            liveIndicator: document.getElementById('liveIndicator'),
             manualControlContainer: document.getElementById('manualControlContainer'),
             acceptBtn: document.getElementById('acceptBtn'),
+            liveValue: document.getElementById('liveValue'),
+            liveIndicator: document.getElementById('liveIndicator'),
             lastReadDisplay: document.getElementById('lastReadDisplay'),
             weightInput: document.getElementById('weightInput'),
             statusMsg: document.getElementById('statusMsg'),
@@ -124,28 +131,28 @@
             closeModalBtn: document.getElementById('closeModalBtn')
         };
 
+        let boxWidth = 80;
+        let boxHeight = 25;
         let currentMode = 'auto';
-        let currentScale = 'ad4401';
         let lastValue = null;
         let stableCount = 0;
         let isCapturedToInput = false;
 
-        // ฟังก์ชันปรับขนาดกรอบตามรุ่นเครื่องชั่ง
-        function updateGuideBoxSize() {
-            currentScale = els.scaleModelSelect.value;
-            if (currentScale === 'sartorius') {
-                els.dynamicGuideBox.style.width = "75%";
-                els.dynamicGuideBox.style.height = "28%";
-                els.dynamicGuideBox.style.top = "36%";
-                els.guideLabel.textContent = "Sartorius: เล็งกรอบจอส้ม";
-            } else {
-                // AD-4401 (Default) จอเขียวยาว
-                els.dynamicGuideBox.style.width = "85%";
-                els.dynamicGuideBox.style.height = "22%";
-                els.dynamicGuideBox.style.top = "39%";
-                els.guideLabel.textContent = "A&D: เล็งกรอบจอเขียว";
-            }
+        // อัปเดตขนาดกรอบ ROI ตามที่ผู้ใช้กดปุ่มปรับ
+        function updateRoiBoxStyle() {
+            els.roiBox.style.width = `${boxWidth}%`;
+            els.roiBox.style.height = `${boxHeight}%`;
+            els.boxDimensionDisplay.textContent = `W: ${boxWidth}% | H: ${boxHeight}%`;
         }
+
+        window.adjustBoxSize = function(type, delta) {
+            if (type === 'w') {
+                boxWidth = Math.min(95, Math.max(30, boxWidth + delta));
+            } else {
+                boxHeight = Math.min(60, Math.max(10, boxHeight + delta));
+            }
+            updateRoiBoxStyle();
+        };
 
         async function initCamera() {
             try {
@@ -161,21 +168,6 @@
             }
         }
 
-        // ล้างสถานะเมื่อสลับรุ่นเครื่องชั่ง หรือเปลี่ยนโหมด
-        function resetState() {
-            isCapturedToInput = false;
-            els.weightInput.value = "";
-            els.lastReadDisplay.textContent = "--.-- kg";
-            stableCount = 0;
-            lastValue = null;
-        }
-
-        els.scaleModelSelect.addEventListener('change', () => {
-            updateGuideBoxSize();
-            resetState(); // เคลียร์ค่าค้างทันทีที่เปลี่ยนรุ่นเครื่องชั่ง
-            els.statusMsg.textContent = `🔄 สลับไปโหมด ${els.scaleModelSelect.options[els.scaleModelSelect.selectedIndex].text}`;
-        });
-        
         els.modeSelect.addEventListener('change', (e) => {
             currentMode = e.target.value;
             resetState();
@@ -188,38 +180,45 @@
             }
         });
 
-        // จำลองค่า Real-time แยกตามรุ่นเครื่องชั่ง (AD-4401 จอเขียว vs Sartorius จอส้ม)
-        function simulateRealtimeOCR() {
+        function resetState() {
+            isCapturedToInput = false;
+            els.weightInput.value = "";
+            els.lastReadDisplay.textContent = "--.-- kg";
+            stableCount = 0;
+            lastValue = null;
+        }
+
+        // Loop อ่านค่า Real-time จากกรอบ ROI (จำลองการใช้ Dot-Anchor & ป้องกันด้วย Math.abs)
+        function simulateContinuousOCR() {
             if (isCapturedToInput) return;
 
-            let randomVal = "0.00";
-            if (currentScale === 'ad4401') {
-                const adValues = ["0.00", "15.20", "50.40", "91.30", "91.30", "91.30"];
-                randomVal = adValues[Math.floor(Math.random() * adValues.length)];
-            } else {
-                const sarValues = ["0.000", "5.120", "12.400", "20.655", "20.655", "20.655"];
-                randomVal = sarValues[Math.floor(Math.random() * sarValues.length)];
-            }
+            // จำลองค่าที่อ่านได้จากกรอบ
+            const mockValues = ["0.00", "15.40", "45.80", "91.30", "91.30", "91.30"];
+            let rawVal = parseFloat(mockValues[Math.floor(Math.random() * mockValues.length)]);
 
-            els.liveValue.textContent = randomVal;
+            // ใช้ Math.abs() ครอบให้เป็นค่าบวกเสมอตามหลักความปลอดภัย
+            rawVal = Math.abs(rawVal);
+            const formattedVal = rawVal.toFixed(2);
+
+            els.liveValue.textContent = formattedVal;
 
             if (currentMode === 'auto') {
-                if (randomVal === lastValue) {
+                if (formattedVal === lastValue) {
                     stableCount++;
                     if (stableCount >= 3) {
-                        els.lastReadDisplay.textContent = randomVal + " kg";
-                        els.weightInput.value = randomVal;
+                        els.lastReadDisplay.textContent = formattedVal + " kg";
+                        els.weightInput.value = formattedVal;
                         isCapturedToInput = true;
                         els.liveIndicator.className = "w-2.5 h-2.5 rounded-full bg-green-500";
-                        els.statusMsg.textContent = "✅ ค่านิ่งแล้ว ดึงลงฟอร์มเรียบร้อย!";
+                        els.statusMsg.textContent = "✅ ค่านิ่งแล้ว ดึงลงฟอร์มเรียบร้อย (ตรวจสอบหรือแก้ได้)";
                     }
                 } else {
                     stableCount = 0;
-                    lastValue = randomVal;
+                    lastValue = formattedVal;
                     els.liveIndicator.className = "w-2.5 h-2.5 rounded-full bg-yellow-400 animate-ping";
                 }
             } else {
-                lastValue = randomVal;
+                lastValue = formattedVal;
             }
         }
 
@@ -228,16 +227,20 @@
             els.lastReadDisplay.textContent = lastValue + " kg";
             els.weightInput.value = lastValue;
             isCapturedToInput = true;
-            els.statusMsg.textContent = "✅ บันทึกค่าล่าสุดลงฟอร์มแล้ว";
+            els.statusMsg.textContent = "✅ กดรับค่าเรียบร้อย (ตรวจสอบหรือแก้ได้)";
         });
 
         els.submitBtn.addEventListener('click', () => {
-            const rawValue = parseFloat(els.weightInput.value);
+            let rawValue = parseFloat(els.weightInput.value);
             if (isNaN(rawValue) || rawValue <= 0) {
-                alert("ยังไม่มีค่าน้ำหนักในฟอร์ม หรือค่าไม่ถูกต้อง");
+                alert("กรุณาระบุค่าน้ำหนักให้ถูกต้องก่อนส่ง");
                 return;
             }
-            els.modalWeightValue.textContent = currentScale === 'sartorius' ? rawValue.toFixed(3) : rawValue.toFixed(2);
+            
+            // บังคับบวกด้วย Math.abs() ป้องกันค่าติดลบก่อนส่งเข้าระบบจริง
+            const finalPayloadWeight = Math.abs(rawValue).toFixed(2);
+            els.modalWeightValue.textContent = finalPayloadWeight;
+            
             els.successModal.classList.remove('hidden');
             els.successModal.classList.add('flex');
         });
@@ -249,10 +252,9 @@
             els.liveIndicator.className = "w-2.5 h-2.5 rounded-full bg-yellow-400 animate-ping";
         });
 
-        // เริ่มต้นรันระบบ
-        updateGuideBoxSize();
+        updateRoiBoxStyle();
         initCamera();
-        setInterval(simulateRealtimeOCR, 500);
+        setInterval(simulateContinuousOCR, 500);
     </script>
 </body>
 </html>
