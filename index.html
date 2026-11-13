@@ -173,47 +173,39 @@
         }
 
         // ฟังก์ชันประมวลผลภาพ รองรับทั้งจอเขียว (A&D) และจอส้ม (Sartorius) บนพื้นหลังมืด
-        function preprocessCanvas(canvas, ctx) {
-            const width = canvas.width;
-            const height = canvas.height;
-            const imgData = ctx.getImageData(0, 0, width, height);
-            const data = imgData.data;
+        // ฟังก์ชันปรับภาพ Threshold แยกตัวเลขเรืองแสงออกจากพื้นหลังมืด (รองรับทั้งจอเขียวและจอส้ม)
+function preprocessCanvas(canvas, ctx) {
+    const width = canvas.width;
+    const height = canvas.height;
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const data = imgData.data;
 
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
 
-                // ตรวจจับแสงเรืองแสงของตัวเลข (ไม่ว่าจะเป็นสีเขียว หรือ สีส้ม/แดง บนพื้นหลังมืด)
-                const isGreenGlow = (g > 60 && g > r * 1.1 && g > b * 1.1);
-                const isAmberGlow = (r > 80 && g > 40 && r > b * 1.4);
+        // หาค่าความสว่างรวม (Brightness) ของพิกเซล
+        const brightness = (r + g + b) / 3;
 
-                if (isGreenGlow || isAmberGlow) {
-                    // ปรับตัวเลขเรืองแสงให้เป็น "สีดำเข้ม" (เหมาะกับ OCR)
-                    data[i] = 0;     
-                    data[i + 1] = 0; 
-                    data[i + 2] = 0; 
-                } else {
-                    // ปรับพื้นหลังมืดและ Noise รอบข้างให้เป็น "สีขาวสะอาด"
-                    data[i] = 255;   
-                    data[i + 1] = 255; 
-                    data[i + 2] = 255; 
-                }
-            }
-            ctx.putImageData(imgData, 0, 0);
+        // เช็กว่าเป็นแสงเรืองแสงของตัวเลขหรือไม่ (ตัวเลขจะสว่างเด่นกว่าพื้นหลังมืด)
+        // หรือเน้นช่องสีเขียว (สำหรับจอ A&D) และสีส้ม/แดง (สำหรับจอ Sartorius)
+        const isBrightGlow = (brightness > 80) || (g > 70) || (r > 90);
 
-            // ตัดขอบขวาเล็กน้อยเพื่อป้องกันติดคำว่า kg หรือตัวหนังสือเกิน
-            const roiWidth = width * 0.88; 
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = roiWidth;
-            tempCanvas.height = height;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(canvas, 0, 0, roiWidth, height, 0, 0, roiWidth, height);
-
-            canvas.width = roiWidth;
-            canvas.height = height;
-            ctx.drawImage(tempCanvas, 0, 0);
+        if (isBrightGlow) {
+            // ถ้าเป็นตัวเลขเรืองแสง ให้ปรับเป็น "สีดำเข้ม" (เพื่อให้ OCR มองเห็นเป็นตัวหนังสือ)
+            data[i] = 0;     
+            data[i + 1] = 0; 
+            data[i + 2] = 0; 
+        } else {
+            // ถ้าเป็นพื้นหลังมืดหรือ Noise รอบข้าง ให้ปรับเป็น "สีขาวสะอาด"
+            data[i] = 255;   
+            data[i + 1] = 255; 
+            data[i + 2] = 255; 
         }
+    }
+    ctx.putImageData(imgData, 0, 0);
+}
 
         async function captureAndRunOCR() {
             const video = els.video;
