@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Universal Scale OCR - Snap, Preview & Retake</title>
+    <title>Universal Scale OCR - Multi-LED Support</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- โหลด Tesseract.js สำหรับประมวลผล OCR จริงบนเบราว์เซอร์ -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body class="bg-gray-950 text-white min-h-screen flex flex-col items-center justify-center p-4 select-none">
@@ -13,10 +12,10 @@
     <div class="w-full max-w-md bg-gray-900 p-5 rounded-2xl shadow-2xl border border-gray-800 flex flex-col gap-4">
         <header class="flex items-center justify-between border-b border-gray-800 pb-3">
             <h1 class="text-base font-bold text-green-400 flex items-center gap-2">
-                <span>⚖️</span> ระบบสแกนน้ำหนัก (Snap & Retake)
+                <span>⚖️</span> ระบบสแกนน้ำหนักอัจฉริยะ
             </h1>
-            <span id="ocrBadge" class="text-[11px] bg-emerald-950 text-emerald-400 border border-emerald-700/50 px-2 py-0.5 rounded font-mono">
-                OCR Ready
+            <span class="text-[11px] bg-emerald-950 text-emerald-400 border border-emerald-700/50 px-2 py-0.5 rounded font-mono">
+                Universal LED Pipeline
             </span>
         </header>
 
@@ -24,51 +23,51 @@
         <div class="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700 shadow-inner flex flex-col items-center justify-center">
             <video id="video" autoplay playsinline class="w-full h-full object-cover"></video>
             
-            <!-- กรอบสี่เหลี่ยมอิสระ (ROI Box) -->
-            <div id="roiBox" class="absolute border-2 border-dashed border-green-400 rounded-lg pointer-events-none flex items-end justify-center pb-1 bg-green-500/10 transition-all duration-100 shadow-lg">
-                <span id="roiHint" class="bg-black/80 text-green-300 text-[10px] px-2 py-0.5 rounded font-mono tracking-wide">
-                    🎯 จัดกรอบครอบตัวเลขและจุด (.)
+            <!-- กรอบสี่เหลี่ยม ROI (ปรับขนาดได้) -->
+            <div id="roiBox" class="absolute border-2 border-dashed border-green-400 rounded-lg pointer-events-none flex items-end justify-center pb-1 bg-green-500/10 transition-all duration-100 shadow-lg" style="width: 80%; height: 30%;">
+                <span class="bg-black/80 text-green-300 text-[10px] px-2 py-0.5 rounded font-mono tracking-wide">
+                    🎯 คลุมเฉพาะตัวเลขหลักใหญ่
                 </span>
             </div>
 
-            <!-- แสดงภาพที่ถูก Crop ออกมาจากกรอบ (แสดงตอนกด Snap) -->
-            <div id="previewOverlay" class="hidden absolute inset-0 bg-black/90 flex-col items-center justify-center p-4 gap-2 z-10">
-                <span class="text-xs text-amber-400 font-mono">📸 ภาพที่จับได้จากกรอบ (Cropped ROI):</span>
-                <canvas id="cropCanvas" class="border-2 border-amber-500 rounded-lg max-w-full max-h-32 shadow-lg bg-black"></canvas>
-                <span id="rawOcrText" class="text-[11px] text-gray-400 font-mono">กำลังวิเคราะห์...</span>
+            <!-- Preview ภาพหลังผ่าน Universal LED Filter -->
+            <div id="previewOverlay" class="hidden absolute inset-0 bg-black/95 flex-col items-center justify-center p-4 gap-2 z-10">
+                <span class="text-xs text-amber-400 font-mono">🔍 ภาพผ่านการกรอง LED (Clean ROI):</span>
+                <canvas id="cropCanvas" class="border-2 border-amber-500 rounded-lg max-w-full max-h-32 shadow-lg bg-white"></canvas>
+                <span id="rawOcrText" class="text-[11px] text-gray-300 font-mono">กำลังประมวลผล...</span>
             </div>
         </div>
 
         <!-- แผงควบคุมปรับขนาดกรอบ (Resize Controls) -->
-        <div id="resizeControls" class="bg-gray-950 p-3 rounded-xl border border-gray-800 flex flex-col gap-2">
+        <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 flex flex-col gap-2">
             <div class="flex items-center justify-between text-xs text-gray-400 font-mono">
                 <span>🎛️ ปรับขนาดกรอบ (กว้าง x สูง):</span>
-                <span id="boxDimensionDisplay" class="text-green-400 font-bold">W: 80% | H: 25%</span>
+                <span id="boxDimensionDisplay" class="text-green-400 font-bold">W: 80% | H: 30%</span>
             </div>
             <div class="grid grid-cols-2 gap-2 text-xs">
                 <div class="flex items-center gap-1">
                     <span class="text-gray-500 font-mono">กว้าง:</span>
-                    <button onclick="adjustBoxSize('w', -5)" class="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 px-3 py-1 rounded font-bold">-</button>
-                    <button onclick="adjustBoxSize('w', 5)" class="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 px-3 py-1 rounded font-bold">+</button>
+                    <button onclick="adjustBoxSize('w', -5)" class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">-</button>
+                    <button onclick="adjustBoxSize('w', 5)" class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">+</button>
                 </div>
                 <div class="flex items-center gap-1 justify-end">
                     <span class="text-gray-500 font-mono">สูง:</span>
-                    <button onclick="adjustBoxSize('h', -5)" class="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 px-3 py-1 rounded font-bold">-</button>
-                    <button onclick="adjustBoxSize('h', 5)" class="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 px-3 py-1 rounded font-bold">+</button>
+                    <button onclick="adjustBoxSize('h', -5)" class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">-</button>
+                    <button onclick="adjustBoxSize('h', 5)" class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">+</button>
                 </div>
             </div>
         </div>
 
-        <!-- ACTION BUTTONS: SNAP vs RETAKE PHOTO -->
+        <!-- ACTION BUTTONS -->
         <div id="actionContainer">
             <button id="snapBtn" class="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.98] py-3.5 rounded-xl font-bold text-white transition shadow-lg text-base flex items-center justify-center gap-2">
-                <span>📸</span> Snap Photo & Extract
+                <span>📸</span> Snap & Extract Weight
             </button>
         </div>
 
         <div id="retakeContainer" class="hidden">
             <button id="retakeBtn" class="w-full bg-amber-600 hover:bg-amber-500 active:scale-[0.98] py-3.5 rounded-xl font-bold text-white transition shadow-lg text-base flex items-center justify-center gap-2">
-                <span>🔄</span> Retake Photo (ถ่ายภาพใหม่)
+                <span>🔄</span> ถ่ายภาพใหม่ (Retake)
             </button>
         </div>
 
@@ -76,7 +75,7 @@
         <div class="flex flex-col gap-3">
             <div class="flex flex-col gap-1">
                 <label for="weightInput" class="text-xs text-gray-300 font-medium flex justify-between">
-                    <span>ค่าน้ำหนักที่อ่านได้ (แก้ไขได้หากคลาดเคลื่อน):</span>
+                    <span>ค่าน้ำหนักที่สกัดได้ (ตรวจสอบ / แก้ไขได้):</span>
                     <span class="text-green-400 font-mono text-[11px]">หน่วย: kg</span>
                 </label>
                 <input 
@@ -86,7 +85,7 @@
                     inputmode="decimal"
                     placeholder="0.00"
                     class="w-full text-3xl font-mono text-center bg-gray-950 border-2 border-green-500 rounded-xl py-2.5 px-3 text-green-300 font-bold focus:outline-none focus:ring-2 focus:ring-green-400"
-                >
+                />
             </div>
 
             <button id="submitBtn" class="w-full bg-green-600 hover:bg-green-500 active:scale-[0.98] py-3 rounded-xl font-bold text-white transition shadow-lg text-base flex items-center justify-center gap-2">
@@ -94,8 +93,8 @@
             </button>
         </div>
 
-        <p id="statusMsg" class="text-center text-xs text-gray-400 font-mono min-h-[1rem]">
-            เล็งตัวเลขให้อยู่ในกรอบ แล้วกด Snap Photo
+        <p id="statusMsg" class="text-center text-xs text-gray-400 mt-4 font-mono min-h-[1rem]">
+            ปรับกรอบให้ครอบตัวเลข แล้วกด Snap & Extract
         </p>
     </div>
 
@@ -123,7 +122,6 @@
             rawOcrText: document.getElementById('rawOcrText'),
             roiBox: document.getElementById('roiBox'),
             boxDimensionDisplay: document.getElementById('boxDimensionDisplay'),
-            resizeControls: document.getElementById('resizeControls'),
             snapBtn: document.getElementById('snapBtn'),
             retakeBtn: document.getElementById('retakeBtn'),
             actionContainer: document.getElementById('actionContainer'),
@@ -137,7 +135,7 @@
         };
 
         let boxWidth = 80;
-        let boxHeight = 25;
+        let boxHeight = 30;
         let isSnapped = false;
 
         function updateRoiBoxStyle() {
@@ -174,22 +172,49 @@
             }
         }
 
-        // ปรับภาพเป็น Grayscale & High Contrast เพื่อให้ OCR อ่านตัวเลข LED/LCD ชัดขึ้น
+        // ฟังก์ชันประมวลผลภาพ รองรับทั้งจอเขียว (A&D) และจอส้ม (Sartorius) บนพื้นหลังมืด
         function preprocessCanvas(canvas, ctx) {
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const width = canvas.width;
+            const height = canvas.height;
+            const imgData = ctx.getImageData(0, 0, width, height);
             const data = imgData.data;
+
             for (let i = 0; i < data.length; i += 4) {
-                const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-                // เพิ่ม Contrast
-                const contrast = avg > 110 ? 255 : 0;
-                data[i] = contrast;     // R
-                data[i + 1] = contrast; // G
-                data[i + 2] = contrast; // B
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                // ตรวจจับแสงเรืองแสงของตัวเลข (ไม่ว่าจะเป็นสีเขียว หรือ สีส้ม/แดง บนพื้นหลังมืด)
+                const isGreenGlow = (g > 60 && g > r * 1.1 && g > b * 1.1);
+                const isAmberGlow = (r > 80 && g > 40 && r > b * 1.4);
+
+                if (isGreenGlow || isAmberGlow) {
+                    // ปรับตัวเลขเรืองแสงให้เป็น "สีดำเข้ม" (เหมาะกับ OCR)
+                    data[i] = 0;     
+                    data[i + 1] = 0; 
+                    data[i + 2] = 0; 
+                } else {
+                    // ปรับพื้นหลังมืดและ Noise รอบข้างให้เป็น "สีขาวสะอาด"
+                    data[i] = 255;   
+                    data[i + 1] = 255; 
+                    data[i + 2] = 255; 
+                }
             }
             ctx.putImageData(imgData, 0, 0);
+
+            // ตัดขอบขวาเล็กน้อยเพื่อป้องกันติดคำว่า kg หรือตัวหนังสือเกิน
+            const roiWidth = width * 0.88; 
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = roiWidth;
+            tempCanvas.height = height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(canvas, 0, 0, roiWidth, height, 0, 0, roiWidth, height);
+
+            canvas.width = roiWidth;
+            canvas.height = height;
+            ctx.drawImage(tempCanvas, 0, 0);
         }
 
-        // ฟังก์ชันตัดภาพจาก ROI และรัน Tesseract OCR จริง
         async function captureAndRunOCR() {
             const video = els.video;
             const canvas = els.cropCanvas;
@@ -200,26 +225,25 @@
             const vWidth = video.videoWidth;
             const vHeight = video.videoHeight;
 
-            // คำนวณสัดส่วนการแสดงผลจริงของ Video (รองรับ object-cover)
-            const cropW = (boxWidth / 100) * vWidth;
-            const cropH = (boxHeight / 100) * vHeight;
-            const cropX = (vWidth - cropW) / 2;
-            const cropY = (vHeight - cropH) / 2;
+            const boxW = (boxWidth / 100) * vWidth;
+            const boxH = (boxHeight / 100) * vHeight;
+            const boxX = (vWidth - boxW) / 2;
+            const boxY = (vHeight - boxH) / 2;
 
-            canvas.width = cropW;
-            canvas.height = cropH;
+            canvas.width = boxW;
+            canvas.height = boxH;
 
-            // วาดภาพเฉพาะกรอบ ROI ลง Canvas
-            ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+            ctx.drawImage(video, boxX, boxY, boxW, boxH, 0, 0, boxW, boxH);
 
-            // แสดงภาพ Cropped Preview ให้ผู้ใช้ดูทันที
+            // รัน Pipeline กรองแสง LED
+            preprocessCanvas(canvas, ctx);
+
             els.previewOverlay.classList.remove('hidden');
             els.previewOverlay.classList.add('flex');
-            els.rawOcrText.textContent = "⏳ กำลังถอดรหัสตัวเลข...";
-            els.statusMsg.textContent = "🔍 กำลังประมวลผล OCR จากภาพที่ถ่าย...";
+            els.rawOcrText.textContent = "⏳ กำลังถอดรหัสตัวเลขจากหน้าจอ...";
+            els.statusMsg.textContent = "🔍 กำลังประมวลผล OCR...";
 
             try {
-                // สร้าง Worker และตั้งค่า Whitelist ให้สนแค่ 0-9 และจุด (.)
                 const worker = await Tesseract.createWorker('eng');
                 await worker.setParameters({
                     tessedit_char_whitelist: '0123456789.',
@@ -228,11 +252,9 @@
                 const { data: { text } } = await worker.recognize(canvas);
                 await worker.terminate();
 
-                // กรองด้วย Regex อีกชั้น เอาเฉพาะตัวเลขและจุด (.)
                 const cleanedText = text.replace(/[^0-9.]/g, '');
-                els.rawOcrText.textContent = `ข้อความดิบที่อ่านได้: "${cleanedText || 'ไม่พบตัวเลข'}"`;
+                els.rawOcrText.textContent = `ค่าที่สกัดได้: "${cleanedText || 'ไม่พบตัวเลข'}"`;
 
-                // แยกส่วนซ้ายและขวาด้วยจุด (.) ตาม Concept
                 if (cleanedText.includes('.')) {
                     const parts = cleanedText.split('.');
                     const leftPart = parts[0] || '0';
@@ -241,65 +263,51 @@
                     
                     const numericValue = Math.abs(parseFloat(reconstructed));
                     if (!isNaN(numericValue)) {
-                        // รักษาจำนวนตำแหน่งทศนิยมตามฝั่งขวาที่อ่านได้
                         els.weightInput.value = numericValue.toFixed(rightPart.length);
-                        els.statusMsg.textContent = "✅ อ่านค่าสำเร็จ! ตรวจสอบตัวเลขหรือกด Retake Photo";
+                        els.statusMsg.textContent = "✅ อ่านค่าสำเร็จ! ตรวจสอบความถูกต้อง";
                     } else {
-                        els.statusMsg.textContent = "⚠️ อ่านค่าไม่ชัดเจน กรุณากด Retake Photo หรือพิมพ์เอง";
+                        els.statusMsg.textContent = "⚠️ อ่านค่าไม่ชัดเจน กรุณากด Retake แล้วลองใหม่";
                     }
                 } else if (cleanedText.length > 0) {
                     const numericValue = Math.abs(parseFloat(cleanedText));
                     els.weightInput.value = isNaN(numericValue) ? "" : numericValue;
-                    els.statusMsg.textContent = "⚠️ ไม่พบจุดทศนิยม (.) โปรดตรวจสอบตัวเลขอีกครั้ง";
+                    els.statusMsg.textContent = "⚠️ ไม่พบจุดทศนิยม (.) โปรดตรวจสอบ";
                 } else {
-                    els.statusMsg.textContent = "❌ ไม่พบตัวเลขในกรอบ กรุณากด Retake Photo ใหม่";
+                    els.statusMsg.textContent = "❌ ไม่พบตัวเลขในกรอบ ลองขยับหรือปรับกรอบใหม่";
                 }
 
             } catch (error) {
                 console.error(error);
-                els.rawOcrText.textContent = "เกิดข้อผิดพลาดในการอ่านภาพ";
-                els.statusMsg.textContent = "⚠️ OCR ขัดข้อง สามารถกด Retake หรือพิมพ์ตัวเลขเองได้";
+                els.rawOcrText.textContent = "เกิดข้อผิดพลาดในการประมวลผล";
+                els.statusMsg.textContent = "⚠️ กรุณากด Retake แล้วลองใหม่";
             }
         }
 
-        // 1. ปุ่ม Snap Photo
         els.snapBtn.addEventListener('click', () => {
             isSnapped = true;
             els.video.pause();
-            
             els.actionContainer.classList.add('hidden');
             els.retakeContainer.classList.remove('hidden');
-            els.resizeControls.classList.add('opacity-40', 'pointer-events-none');
-
             captureAndRunOCR();
         });
 
-        // 2. ปุ่ม Retake Photo (ถ่ายภาพใหม่)
         els.retakeBtn.addEventListener('click', () => {
             isSnapped = false;
             els.video.play();
-            
-            // ซ่อนภาพ Preview กลับไปหน้ากล้องสด
             els.previewOverlay.classList.add('hidden');
             els.previewOverlay.classList.remove('flex');
-            
             els.retakeContainer.classList.add('hidden');
             els.actionContainer.classList.remove('hidden');
-            els.resizeControls.classList.remove('opacity-40', 'pointer-events-none');
-            
             els.weightInput.value = "";
-            els.statusMsg.textContent = "🔄 พร้อมถ่ายใหม่ ปรับกรอบแล้วกด Snap Photo";
+            els.statusMsg.textContent = "🔄 พร้อมถ่ายใหม่ ปรับกรอบแล้วกด Snap";
         });
 
-        // 3. ปุ่ม Submit
         els.submitBtn.addEventListener('click', () => {
             let rawValue = parseFloat(els.weightInput.value);
             if (isNaN(rawValue) || rawValue <= 0) {
                 alert("กรุณาระบุค่าน้ำหนักให้ถูกต้องก่อนส่ง");
                 return;
             }
-            
-            // คงทศนิยมตามที่แสดงในช่อง Input และครอบด้วย Math.abs()
             const inputStr = els.weightInput.value;
             const decimalPlaces = inputStr.includes('.') ? inputStr.split('.')[1].length : 2;
             const finalPayloadWeight = Math.abs(rawValue).toFixed(decimalPlaces);
@@ -309,7 +317,6 @@
             els.successModal.classList.add('flex');
         });
 
-        // 4. ปิด Modal และเริ่มรอบใหม่
         els.closeModalBtn.addEventListener('click', () => {
             els.successModal.classList.add('hidden');
             els.successModal.classList.remove('flex');
