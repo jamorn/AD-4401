@@ -82,8 +82,6 @@
 const els = {
   video: document.getElementById('video'),
   cropCanvas: document.getElementById('cropCanvas'),
-  previewOverlay: document.getElementById('previewOverlay'),
-  rawOcrText: document.getElementById('rawOcrText'),
   roiBox: document.getElementById('roiBox'),
   boxDimensionDisplay: document.getElementById('boxDimensionDisplay'),
   snapBtn: document.getElementById('snapBtn'),
@@ -98,15 +96,12 @@ const els = {
   closeModalBtn: document.getElementById('closeModalBtn')
 };
 
-let boxWidth = 80;
-let boxHeight = 30;
-let isSnapped = false;
-let workerPromise = null;
+let boxWidth = 80, boxHeight = 30, isSnapped = false;
 
-/* ---------------- ROI ---------------- */
+/* ---------- ROI ---------- */
 function updateRoiBoxStyle() {
   if (isSnapped) return;
-  els.roiBox.style.width  = boxWidth  + '%';
+  els.roiBox.style.width  = boxWidth + '%';
   els.roiBox.style.height = boxHeight + '%';
   els.roiBox.style.left   = ((100 - boxWidth) / 2) + '%';
   els.roiBox.style.top    = ((100 - boxHeight) / 2) + '%';
@@ -119,129 +114,107 @@ window.adjustBoxSize = function (type, delta) {
   updateRoiBoxStyle();
 };
 
-/* ---------------- Camera ---------------- */
+/* ---------- Camera ---------- */
 async function initCamera() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    const s = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false
     });
-    els.video.srcObject = stream;
+    els.video.srcObject = s;
     await els.video.play().catch(() => {});
-  } catch (err) {
+  } catch (e) {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      els.video.srcObject = stream;
-    } catch (e) {
-      els.statusMsg.textContent = '⚠️ เปิดกล้องไม่ได้ (ต้องรันบน https:// หรือ localhost)';
+      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      els.video.srcObject = s;
+    } catch (err) {
+      els.statusMsg.textContent = '⚠️ เปิดกล้องไม่ได้ (ต้อง https:// หรือ localhost)';
     }
   }
 }
 
-/* ---------------- Image processing ---------------- */
-// Otsu: หา threshold ที่แยกตัวเลข (สว่าง) ออกจากพื้นหลัง (มืด) แบบอัตโนมัติ
-function otsu(gray) {
-  const hist = new Uint32Array(256);
-  for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
-  const total = gray.length;
-  let sum = 0;
-  for (let t = 0; t < 256; t++) sum += t * hist[t];
+/* ---------- 7-segment templates ---------- */
+const SEGMENTS = {
+  '0': ['a','b','c','d','e','f'],
+  '1': ['b','c'],
+  '2': ['a','b','g','e','d'],
+  '3': ['a','b','g','c','d'],
+  '4': ['f','g','b','c'],
+  '5': ['a','f','g','c','d'],
+  '6': ['a','f','g','e','c','d'],
+  '7': ['a','b','c'],
+  '8': ['a','b','c','d','e','f','g'],
+  '9': ['a','b','c','d','f','g']
+};
 
-  let sumB = 0, wB = 0, maxVar = -1, threshold = 128;
-  for (let t = 0; t < 256; t++) {
-    wB += hist[t];
-    if (wB === 0) continue;
-    const wF = total - wB;
-    if (wF === 0) break;
-    sumB += t * hist[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB * wF * (mB - mF) * (mB - mF);
-    if (between > maxVar) { maxVar = between; threshold = t; }
+const TW = 40, TH = 60;   // ขนาด template ที่ normalize
+
+function makeTemplate(digit) {
+  const c = document.createElement('canvas');
+  c.width = TW; c.height = TH;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, TW, TH);
+  ctx.fillStyle = '#fff';
+
+  const t = Math.round(Math.min(TW, TH) * 0.16);
+  const on = new Set(SEGMENTS[digit] || []);
+  const rects = {
+    a: [t, 0, TW - 2*t, t],
+    b: [TW - t, t, t, TH/2 - t],
+    c: [TW - t, TH/2 + Math.round(t/2), t, TH/2 - t],
+    d: [t, TH - t, TW - 2*t, t],
+    e: [0, TH/2 + Math.round(t/2), t, TH/2 - t],
+    f: [0, t, t, TH/2 - t],
+    g: [t, Math.round(TH/2 - t/2), TW - 2*t, t]
+  };
+  for (const [k, r] of Object.entries(rects)) {
+    if (on.has(k)) ctx.fillRect(r[0], r[1], r[2], r[3]);
   }
-  return threshold;
+  return c;
 }
+const TEMPLATES = {};
+for (let d = 0; d <= 9; d++) TEMPLATES[d] = makeTemplate(d);
 
-// แปลงภาพ ROI -> ขาว/ดำ (ตัวเลขดำบนพื้นขาว) พร้อมคืนค่า threshold ที่ใช้
-function preprocess(canvas) {
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  const w = canvas.width, h = canvas.height;
-  const img = ctx.getImageData(0, 0, w, h);
-  const d = img.data;
-
-  const gray = new Uint8Array(w * h);
-  let maxV = 0;
-  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
-    // ใช้ช่องสีที่สว่างที่สุด -> จับได้ทั้ง LED เขียว / ส้ม / แดง / ขาว
-    const v = Math.max(d[i], d[i + 1], d[i + 2]);
-    gray[p] = v;
-    if (v > maxV) maxV = v;
-  }
-
-  if (maxV < 45) return { ok: false, maxV };            // มืดสนิท ไม่มีตัวเลข
-
-  const t  = otsu(gray);
-  const th = Math.max(t, Math.round(maxV * 0.35));      // ดัน threshold ขึ้นเพื่อตัด glow/แสงฟุ้ง
-
-  for (let i = 0, p = 0; p < gray.length; p++, i += 4) {
-    const v = gray[p] > th ? 0 : 255;                   // ตัวเลข -> ดำ, พื้นหลัง -> ขาว
-    d[i] = d[i + 1] = d[i + 2] = v;
-    d[i + 3] = 255;
-  }
-  ctx.putImageData(img, 0, 0);
-  return { ok: true, threshold: th, maxV };
-}
-
-// ขยายภาพ + ใส่ขอบขาว (Tesseract แม่นขึ้นมากเมื่อตัวอักษรสูงพอและมี margin)
-function buildOcrCanvas(src) {
-  const factor = Math.min(4, Math.max(1, Math.round(900 / Math.max(1, src.width))));
-  const pad = 24;
+function normalizeTo(src, w, h) {
   const out = document.createElement('canvas');
-  out.width  = src.width  * factor + pad * 2;
-  out.height = src.height * factor + pad * 2;
+  out.width = w; out.height = h;
   const c = out.getContext('2d');
-  c.fillStyle = '#ffffff';
-  c.fillRect(0, 0, out.width, out.height);
-  c.imageSmoothingEnabled = false;
-  c.drawImage(src, pad, pad, src.width * factor, src.height * factor);
+  c.imageSmoothingEnabled = true;
+  c.drawImage(src, 0, 0, w, h);
   return out;
 }
 
-/* ---------------- Tesseract worker (สร้างครั้งเดียว ใช้ซ้ำ) ---------------- */
-function getWorker() {
-  if (!workerPromise) {
-    workerPromise = (async () => {
-      const worker = await Tesseract.createWorker('eng', 1, {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            els.statusMsg.textContent = `🔍 กำลังอ่าน... ${Math.round(m.progress * 100)}%`;
-          }
-        }
-      });
-      await worker.setParameters({
-        tessedit_char_whitelist: '0123456789.',
-        tessedit_pageseg_mode: '7',     // SINGLE LINE -> สำคัญมาก!
-        user_defined_dpi: '300',
-        preserve_interword_spaces: '1'
-      });
-      return worker;
-    })().catch(err => { workerPromise = null; throw err; });
-  }
-  return workerPromise;
+function score(a, b) {
+  const w = a.width, h = a.height;
+  const ad = a.getContext('2d').getImageData(0, 0, w, h).data;
+  const bd = b.getContext('2d').getImageData(0, 0, w, h).data;
+  let s = 0;
+  for (let i = 0; i < ad.length; i += 4) s += Math.abs(ad[i] - bd[i]);
+  return s / (w * h);
 }
 
-/* ---------------- Capture ---------------- */
-async function captureAndRunOCR() {
+function recognizeDigit(region) {
+  const norm = normalizeTo(region, TW, TH);
+  let best = '?', bestScore = Infinity;
+  for (const [d, tpl] of Object.entries(TEMPLATES)) {
+    const sc = score(norm, tpl);
+    if (sc < bestScore) { bestScore = sc; best = d; }
+  }
+  return { digit: best, confidence: Math.max(0, 1 - bestScore / 255) };
+}
+
+/* ---------- Main pipeline ---------- */
+async function runTemplateMatching() {
   const v = els.video;
   if (!v.videoWidth || !v.videoHeight) {
     els.statusMsg.textContent = '⚠️ กล้องยังไม่พร้อม';
     return;
   }
 
+  // map ROI -> video frame (object-fit: cover)
   const vw = v.videoWidth, vh = v.videoHeight;
   const cw = v.clientWidth, ch = v.clientHeight;
-
-  // ---- แปลงพิกัดกรอบบนหน้าจอ -> พิกัดจริงใน video frame (กรณี object-fit: cover) ----
   const scale   = Math.max(cw / vw, ch / vh);
   const offsetX = (cw - vw * scale) / 2;
   const offsetY = (ch - vh * scale) / 2;
@@ -251,83 +224,144 @@ async function captureAndRunOCR() {
   const roiXpx = (cw - roiWpx) / 2;
   const roiYpx = (ch - roiHpx) / 2;
 
-  let sx = (roiXpx - offsetX) / scale;
-  let sy = (roiYpx - offsetY) / scale;
-  let sw = roiWpx / scale;
-  let sh = roiHpx / scale;
-
-  // clamp ให้อยู่ในเฟรม
-  sx = Math.max(0, Math.min(vw - 1, sx));
-  sy = Math.max(0, Math.min(vh - 1, sy));
-  sw = Math.max(1, Math.min(vw - sx, sw));
-  sh = Math.max(1, Math.min(vh - sy, sh));
+  let sx = Math.max(0, Math.min(vw - 1, (roiXpx - offsetX) / scale));
+  let sy = Math.max(0, Math.min(vh - 1, (roiYpx - offsetY) / scale));
+  let sw = Math.max(1, Math.min(vw - sx, roiWpx / scale));
+  let sh = Math.max(1, Math.min(vh - sy, roiHpx / scale));
 
   const src = document.createElement('canvas');
   src.width  = Math.round(sw);
   src.height = Math.round(sh);
-  src.getContext('2d', { willReadFrequently: true })
-     .drawImage(v, sx, sy, sw, sh, 0, 0, src.width, src.height);
+  const sctx = src.getContext('2d', { willReadFrequently: true });
+  sctx.drawImage(v, sx, sy, sw, sh, 0, 0, src.width, src.height);
 
-  // ---- ประมวลผล ----
-  const info = preprocess(src);
-  const ocrCanvas = buildOcrCanvas(src);
+  const W = src.width, H = src.height;
+  const img = sctx.getImageData(0, 0, W, H);
+  const d = img.data;
 
-  // แสดง preview ว่า Tesseract เห็นอะไร
-  els.cropCanvas.width  = ocrCanvas.width;
-  els.cropCanvas.height = ocrCanvas.height;
-  els.cropCanvas.getContext('2d').drawImage(ocrCanvas, 0, 0);
-  els.previewOverlay.classList.remove('hidden');
-  els.previewOverlay.classList.add('flex');
-
-  if (!info.ok) {
-    els.rawOcrText.textContent = 'ภาพมืดเกินไป / ไม่พบแสง LED';
-    els.statusMsg.textContent  = '❌ ไม่เห็นตัวเลข ลองขยับกล้องหรือปรับแสง';
+  // ---- 1. หา max brightness ----
+  let maxB = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = Math.max(d[i], d[i+1], d[i+2]);
+    if (v > maxB) maxB = v;
+  }
+  if (maxB < 40) {
+    els.statusMsg.textContent = '❌ ภาพมืดเกินไป / ไม่พบ LED';
     return;
   }
 
-  els.rawOcrText.textContent = `threshold=${info.threshold} | กำลังอ่าน...`;
-  els.statusMsg.textContent  = '🔍 กำลังประมวลผล OCR...';
+  // ---- 2. Binarize: bright -> white (digit), dark -> black (bg) ----
+  const th = Math.max(80, maxB * 0.45);
+  for (let i = 0; i < d.length; i += 4) {
+    const v = Math.max(d[i], d[i+1], d[i+2]);
+    const val = v > th ? 255 : 0;
+    d[i] = d[i+1] = d[i+2] = val;
+    d[i+3] = 255;
+  }
+  sctx.putImageData(img, 0, 0);
 
-  try {
-    const worker = await getWorker();
-    const { data: { text } } = await worker.recognize(ocrCanvas);
-
-    els.rawOcrText.textContent = `RAW: "${(text || '').trim()}"`;
-
-    // ---- parse ----
-    let s = (text || '').replace(/[^0-9.]/g, '');
-    const firstDot = s.indexOf('.');
-    if (firstDot !== -1) {
-      s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, '');
+  // ---- 3. Column projection: หาว่าคอลัมน์ไหนมี white pixels ----
+  const colInk = new Array(W).fill(0);
+  for (let x = 0; x < W; x++) {
+    for (let y = 0; y < H; y++) {
+      if (d[(y*W + x) * 4] > 128) colInk[x]++;
     }
+  }
+  const minInk = Math.max(1, Math.floor(H * 0.04));
+  const groups = [];
+  let start = -1;
+  for (let x = 0; x <= W; x++) {
+    const on = x < W && colInk[x] >= minInk;
+    if (on && start === -1) start = x;
+    if (!on && start !== -1) { groups.push({ x0: start, x1: x }); start = -1; }
+  }
+  if (!groups.length) {
+    els.statusMsg.textContent = '❌ ไม่พบตัวเลขในกรอบ';
+    return;
+  }
 
-    if (s && !isNaN(parseFloat(s))) {
-      els.weightInput.value = s;
-      els.statusMsg.textContent = '✅ อ่านค่าสำเร็จ! ตรวจสอบความถูกต้องอีกครั้ง';
-    } else {
-      els.statusMsg.textContent = '❌ ไม่พบตัวเลขในกรอบ ลองขยับ/ปรับกรอบ/ปรับแสง';
+  // ---- 4. bbox แต่ละกลุ่ม + classifiy digit vs dot ----
+  const items = groups.map(g => {
+    let top = H, bottom = 0;
+    for (let x = g.x0; x < g.x1; x++) {
+      for (let y = 0; y < H; y++) {
+        if (d[(y*W + x) * 4] > 128) {
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+      }
     }
-  } catch (error) {
-    console.error(error);
-    els.rawOcrText.textContent = 'ERROR: ' + (error && error.message ? error.message : error);
-    els.statusMsg.textContent  = '⚠️ โหลด Tesseract ไม่สำเร็จ (ตรวจสอบอินเทอร์เน็ต)';
+    return { ...g, y0: top, y1: bottom, h: bottom - top + 1 };
+  });
+
+  const maxDigitH = Math.max(...items.map(it => it.h));
+  items.forEach(it => { it.isDot = it.h < maxDigitH * 0.5; });
+
+  // ---- 5. template match แต่ละหลัก ----
+  let result = '';
+  let debug = [];
+  for (const it of items) {
+    if (it.isDot) { result += '.'; debug.push('.'); continue; }
+
+    const c = document.createElement('canvas');
+    c.width  = it.x1 - it.x0;
+    c.height = it.h;
+    const cctx = c.getContext('2d');
+    cctx.drawImage(src, it.x0, it.y0, c.width, it.h, 0, 0, c.width, it.h);
+
+    // re-binarize (ให้แน่ใจว่าเป็น 0/255)
+    const cd = cctx.getImageData(0, 0, c.width, c.height);
+    for (let i = 0; i < cd.data.length; i += 4) {
+      const v = Math.max(cd.data[i], cd.data[i+1], cd.data[i+2]);
+      const val = v > 128 ? 255 : 0;
+      cd.data[i] = cd.data[i+1] = cd.data[i+2] = val;
+    }
+    cctx.putImageData(cd, 0, 0);
+
+    const { digit, confidence } = recognizeDigit(c);
+    result += digit;
+    debug.push(`${digit}(${confidence.toFixed(2)})`);
+  }
+
+  // ---- 6. แสดง preview + ผลลัพธ์ ----
+  els.cropCanvas.width  = W;
+  els.cropCanvas.height = H;
+  els.cropCanvas.getContext('2d').drawImage(src, 0, 0);
+  els.cropCanvas.classList.remove('hidden');
+  els.cropCanvas.style.display = 'block';
+  els.cropCanvas.style.position = 'absolute';
+  els.cropCanvas.style.inset = '0';
+  els.cropCanvas.style.width = '100%';
+  els.cropCanvas.style.height = '100%';
+  els.cropCanvas.style.opacity = '0.6';
+  els.cropCanvas.style.pointerEvents = 'none';
+
+  const cleaned = result.replace(/[^0-9.]/g, '');
+  if (/^\d+(\.\d+)?$/.test(cleaned)) {
+    els.weightInput.value = cleaned;
+    els.statusMsg.textContent = `✅ อ่านได้: ${cleaned}  (debug: ${debug.join(' ')})`;
+  } else if (cleaned) {
+    els.weightInput.value = cleaned;
+    els.statusMsg.textContent = `⚠️ อ่านได้ไม่สมบูรณ์: "${cleaned}" (debug: ${debug.join(' ')})`;
+  } else {
+    els.statusMsg.textContent = '❌ อ่านไม่ได้ ลองปรับกรอบ/แสง';
   }
 }
 
-/* ---------------- Events ---------------- */
+/* ---------- Events ---------- */
 els.snapBtn.addEventListener('click', () => {
   isSnapped = true;
   els.video.pause();
   els.actionContainer.classList.add('hidden');
   els.retakeContainer.classList.remove('hidden');
-  captureAndRunOCR();
+  runTemplateMatching();
 });
 
 els.retakeBtn.addEventListener('click', () => {
   isSnapped = false;
   els.video.play().catch(() => {});
-  els.previewOverlay.classList.add('hidden');
-  els.previewOverlay.classList.remove('flex');
+  els.cropCanvas.classList.add('hidden');
+  els.cropCanvas.style.display = 'none';
   els.retakeContainer.classList.add('hidden');
   els.actionContainer.classList.remove('hidden');
   els.weightInput.value = '';
@@ -335,15 +369,14 @@ els.retakeBtn.addEventListener('click', () => {
 });
 
 els.submitBtn.addEventListener('click', () => {
-  const rawValue = parseFloat(els.weightInput.value);
-  if (isNaN(rawValue) || rawValue <= 0) { alert('กรุณาระบุค่าน้ำหนักให้ถูกต้อง'); return; }
+  const rv = parseFloat(els.weightInput.value);
+  if (isNaN(rv) || rv <= 0) { alert('กรุณาระบุค่าน้ำหนักให้ถูกต้อง'); return; }
   const str = els.weightInput.value;
   const dp = str.includes('.') ? str.split('.')[1].length : 2;
-  els.modalWeightValue.textContent = Math.abs(rawValue).toFixed(dp);
+  els.modalWeightValue.textContent = Math.abs(rv).toFixed(dp);
   els.successModal.classList.remove('hidden');
   els.successModal.classList.add('flex');
 });
-
 els.closeModalBtn.addEventListener('click', () => {
   els.successModal.classList.add('hidden');
   els.successModal.classList.remove('flex');
