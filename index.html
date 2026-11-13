@@ -1,322 +1,357 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Universal Scale OCR - Multi-LED Support</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Universal Scale OCR - Fixed</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body class="bg-gray-950 text-white min-h-screen flex flex-col items-center justify-center p-4 select-none">
 
-    <div class="w-full max-w-md bg-gray-900 p-5 rounded-2xl shadow-2xl border border-gray-800 flex flex-col gap-4">
-        <header class="flex items-center justify-between border-b border-gray-800 pb-3">
-            <h1 class="text-base font-bold text-green-400 flex items-center gap-2">
-                <span>⚖️</span> ระบบสแกนน้ำหนักอัจฉริยะ
-            </h1>
-            <span class="text-[11px] bg-emerald-950 text-emerald-400 border border-emerald-700/50 px-2 py-0.5 rounded font-mono">
-                Universal LED Pipeline
-            </span>
-        </header>
+<div class="w-full max-w-md bg-gray-900 p-5 rounded-2xl shadow-2xl border border-gray-800 flex flex-col gap-4">
+  <header class="flex items-center justify-between border-b border-gray-800 pb-3">
+    <h1 class="text-base font-bold text-green-400 flex items-center gap-2"><span>⚖️</span> ระบบสแกนน้ำหนัก</h1>
+    <span class="text-[11px] bg-emerald-950 text-emerald-400 border border-emerald-700/50 px-2 py-0.5 rounded font-mono">Fixed Pipeline</span>
+  </header>
 
-        <!-- CAMERA & ROI BOX -->
-        <div class="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700 shadow-inner flex flex-col items-center justify-center">
-            <video id="video" autoplay playsinline class="w-full h-full object-cover"></video>
-            
-            <!-- กรอบสี่เหลี่ยม ROI (ปรับขนาดได้) -->
-            <div id="roiBox" class="absolute border-2 border-dashed border-green-400 rounded-lg pointer-events-none flex items-end justify-center pb-1 bg-green-500/10 transition-all duration-100 shadow-lg" style="width: 80%; height: 30%;">
-                <span class="bg-black/80 text-green-300 text-[10px] px-2 py-0.5 rounded font-mono tracking-wide">
-                    🎯 คลุมเฉพาะตัวเลขหลักใหญ่
-                </span>
-            </div>
+  <div class="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700 shadow-inner">
+    <video id="video" autoplay playsinline muted class="w-full h-full object-cover"></video>
 
-            <!-- Preview ภาพหลังผ่าน Universal LED Filter -->
-            <div id="previewOverlay" class="hidden absolute inset-0 bg-black/95 flex-col items-center justify-center p-4 gap-2 z-10">
-                <span class="text-xs text-amber-400 font-mono">🔍 ภาพผ่านการกรอง LED (Clean ROI):</span>
-                <canvas id="cropCanvas" class="border-2 border-amber-500 rounded-lg max-w-full max-h-32 shadow-lg bg-white"></canvas>
-                <span id="rawOcrText" class="text-[11px] text-gray-300 font-mono">กำลังประมวลผล...</span>
-            </div>
-        </div>
-
-        <!-- แผงควบคุมปรับขนาดกรอบ (Resize Controls) -->
-        <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 flex flex-col gap-2">
-            <div class="flex items-center justify-between text-xs text-gray-400 font-mono">
-                <span>🎛️ ปรับขนาดกรอบ (กว้าง x สูง):</span>
-                <span id="boxDimensionDisplay" class="text-green-400 font-bold">W: 80% | H: 30%</span>
-            </div>
-            <div class="grid grid-cols-2 gap-2 text-xs">
-                <div class="flex items-center gap-1">
-                    <span class="text-gray-500 font-mono">กว้าง:</span>
-                    <button onclick="adjustBoxSize('w', -5)" class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">-</button>
-                    <button onclick="adjustBoxSize('w', 5)" class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">+</button>
-                </div>
-                <div class="flex items-center gap-1 justify-end">
-                    <span class="text-gray-500 font-mono">สูง:</span>
-                    <button onclick="adjustBoxSize('h', -5)" class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">-</button>
-                    <button onclick="adjustBoxSize('h', 5)" class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">+</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- ACTION BUTTONS -->
-        <div id="actionContainer">
-            <button id="snapBtn" class="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.98] py-3.5 rounded-xl font-bold text-white transition shadow-lg text-base flex items-center justify-center gap-2">
-                <span>📸</span> Snap & Extract Weight
-            </button>
-        </div>
-
-        <div id="retakeContainer" class="hidden">
-            <button id="retakeBtn" class="w-full bg-amber-600 hover:bg-amber-500 active:scale-[0.98] py-3.5 rounded-xl font-bold text-white transition shadow-lg text-base flex items-center justify-center gap-2">
-                <span>🔄</span> ถ่ายภาพใหม่ (Retake)
-            </button>
-        </div>
-
-        <!-- VERIFY & SUBMIT FORM -->
-        <div class="flex flex-col gap-3">
-            <div class="flex flex-col gap-1">
-                <label for="weightInput" class="text-xs text-gray-300 font-medium flex justify-between">
-                    <span>ค่าน้ำหนักที่สกัดได้ (ตรวจสอบ / แก้ไขได้):</span>
-                    <span class="text-green-400 font-mono text-[11px]">หน่วย: kg</span>
-                </label>
-                <input 
-                    type="number" 
-                    id="weightInput" 
-                    step="0.001" 
-                    inputmode="decimal"
-                    placeholder="0.00"
-                    class="w-full text-3xl font-mono text-center bg-gray-950 border-2 border-green-500 rounded-xl py-2.5 px-3 text-green-300 font-bold focus:outline-none focus:ring-2 focus:ring-green-400"
-                />
-            </div>
-
-            <button id="submitBtn" class="w-full bg-green-600 hover:bg-green-500 active:scale-[0.98] py-3 rounded-xl font-bold text-white transition shadow-lg text-base flex items-center justify-center gap-2">
-                <span>✅</span> ยืนยันส่งข้อมูลเข้าระบบ
-            </button>
-        </div>
-
-        <p id="statusMsg" class="text-center text-xs text-gray-400 mt-4 font-mono min-h-[1rem]">
-            ปรับกรอบให้ครอบตัวเลข แล้วกด Snap & Extract
-        </p>
+    <div id="roiBox" class="absolute border-2 border-dashed border-green-400 rounded-lg pointer-events-none flex items-end justify-center pb-1 bg-green-500/10" style="width:80%;height:30%;left:10%;top:35%;">
+      <span class="bg-black/80 text-green-300 text-[10px] px-2 py-0.5 rounded font-mono">🎯 คลุมเฉพาะตัวเลข</span>
     </div>
 
-    <!-- SUCCESS MODAL -->
-    <div id="successModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-        <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
-            <div class="w-16 h-16 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl border border-green-500/30">
-                ✓
-            </div>
-            <h2 class="text-xl font-bold text-white mb-2">บันทึกข้อมูลสำเร็จ</h2>
-            <p class="text-gray-300 text-base mb-6">
-                น้ำหนักที่ส่งคือ <span id="modalWeightValue" class="text-2xl font-mono font-bold text-green-400 mx-1">0.00</span> kg
-            </p>
-            <button id="closeModalBtn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl transition shadow-lg">
-                ตกลง (เริ่มรอบถัดไป)
-            </button>
-        </div>
+    <div id="previewOverlay" class="hidden absolute inset-0 bg-black/95 flex-col items-center justify-center p-4 gap-2 z-10">
+      <span class="text-xs text-amber-400 font-mono">🔍 ภาพที่ Tesseract เห็น:</span>
+      <canvas id="cropCanvas" class="border-2 border-amber-500 rounded-lg max-w-full max-h-32 shadow-lg bg-white"></canvas>
+      <span id="rawOcrText" class="text-[11px] text-gray-300 font-mono text-center break-all px-2">กำลังประมวลผล...</span>
     </div>
+  </div>
 
-    <script>
-        const els = {
-            video: document.getElementById('video'),
-            cropCanvas: document.getElementById('cropCanvas'),
-            previewOverlay: document.getElementById('previewOverlay'),
-            rawOcrText: document.getElementById('rawOcrText'),
-            roiBox: document.getElementById('roiBox'),
-            boxDimensionDisplay: document.getElementById('boxDimensionDisplay'),
-            snapBtn: document.getElementById('snapBtn'),
-            retakeBtn: document.getElementById('retakeBtn'),
-            actionContainer: document.getElementById('actionContainer'),
-            retakeContainer: document.getElementById('retakeContainer'),
-            weightInput: document.getElementById('weightInput'),
-            statusMsg: document.getElementById('statusMsg'),
-            submitBtn: document.getElementById('submitBtn'),
-            successModal: document.getElementById('successModal'),
-            modalWeightValue: document.getElementById('modalWeightValue'),
-            closeModalBtn: document.getElementById('closeModalBtn')
-        };
+  <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 flex flex-col gap-2">
+    <div class="flex items-center justify-between text-xs text-gray-400 font-mono">
+      <span>🎛️ ปรับขนาดกรอบ:</span>
+      <span id="boxDimensionDisplay" class="text-green-400 font-bold">W: 80% | H: 30%</span>
+    </div>
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div class="flex items-center gap-1">
+        <span class="text-gray-500 font-mono">กว้าง:</span>
+        <button onclick="adjustBoxSize('w',-5)" class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">-</button>
+        <button onclick="adjustBoxSize('w',5)"  class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">+</button>
+      </div>
+      <div class="flex items-center gap-1 justify-end">
+        <span class="text-gray-500 font-mono">สูง:</span>
+        <button onclick="adjustBoxSize('h',-5)" class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">-</button>
+        <button onclick="adjustBoxSize('h',5)"  class="bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded font-bold">+</button>
+      </div>
+    </div>
+  </div>
 
-        let boxWidth = 80;
-        let boxHeight = 30;
-        let isSnapped = false;
+  <div id="actionContainer">
+    <button id="snapBtn" class="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.98] py-3.5 rounded-xl font-bold transition shadow-lg text-base">📸 Snap &amp; Extract Weight</button>
+  </div>
+  <div id="retakeContainer" class="hidden">
+    <button id="retakeBtn" class="w-full bg-amber-600 hover:bg-amber-500 active:scale-[0.98] py-3.5 rounded-xl font-bold transition shadow-lg text-base">🔄 ถ่ายภาพใหม่ (Retake)</button>
+  </div>
 
-        function updateRoiBoxStyle() {
-            if (isSnapped) return;
-            els.roiBox.style.width = `${boxWidth}%`;
-            els.roiBox.style.height = `${boxHeight}%`;
-            els.boxDimensionDisplay.textContent = `W: ${boxWidth}% | H: ${boxHeight}%`;
-        }
+  <div class="flex flex-col gap-3">
+    <label for="weightInput" class="text-xs text-gray-300 font-medium flex justify-between">
+      <span>ค่าน้ำหนักที่สกัดได้ (แก้ไขได้):</span>
+      <span class="text-green-400 font-mono text-[11px]">kg</span>
+    </label>
+    <input type="number" id="weightInput" step="0.001" inputmode="decimal" placeholder="0.00"
+           class="w-full text-3xl font-mono text-center bg-gray-950 border-2 border-green-500 rounded-xl py-2.5 px-3 text-green-300 font-bold focus:outline-none focus:ring-2 focus:ring-green-400"/>
+    <button id="submitBtn" class="w-full bg-green-600 hover:bg-green-500 active:scale-[0.98] py-3 rounded-xl font-bold transition shadow-lg">✅ ยืนยันส่งข้อมูล</button>
+  </div>
 
-        window.adjustBoxSize = function(type, delta) {
-            if (isSnapped) return;
-            if (type === 'w') {
-                boxWidth = Math.min(95, Math.max(30, boxWidth + delta));
-            } else {
-                boxHeight = Math.min(60, Math.max(10, boxHeight + delta));
-            }
-            updateRoiBoxStyle();
-        };
+  <p id="statusMsg" class="text-center text-xs text-gray-400 mt-2 font-mono min-h-[1rem]">ปรับกรอบให้ครอบตัวเลข แล้วกด Snap</p>
+</div>
 
-        async function initCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: { exact: 'environment' } }, 
-                    audio: false 
-                });
-                els.video.srcObject = stream;
-            } catch (err) {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                    els.video.srcObject = stream;
-                } catch (e) {
-                    els.statusMsg.textContent = "⚠️ ไม่สามารถเข้าถึงกล้องได้";
-                }
-            }
-        }
+<div id="successModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+  <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
+    <div class="w-16 h-16 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl border border-green-500/30">✓</div>
+    <h2 class="text-xl font-bold mb-2">บันทึกข้อมูลสำเร็จ</h2>
+    <p class="text-gray-300 text-base mb-6">น้ำหนักที่ส่งคือ
+      <span id="modalWeightValue" class="text-2xl font-mono font-bold text-green-400 mx-1">0.00</span> kg</p>
+    <button id="closeModalBtn" class="w-full bg-green-600 hover:bg-green-500 font-bold py-3 rounded-xl transition shadow-lg">ตกลง (เริ่มรอบถัดไป)</button>
+  </div>
+</div>
 
-        // ฟังก์ชันประมวลผลภาพ รองรับทั้งจอเขียว (A&D) และจอส้ม (Sartorius) บนพื้นหลังมืด
-        // ฟังก์ชันปรับภาพ Threshold แยกตัวเลขเรืองแสงออกจากพื้นหลังมืด (รองรับทั้งจอเขียวและจอส้ม)
-function preprocessCanvas(canvas, ctx) {
-    const width = canvas.width;
-    const height = canvas.height;
-    const imgData = ctx.getImageData(0, 0, width, height);
-    const data = imgData.data;
+<script>
+const els = {
+  video: document.getElementById('video'),
+  cropCanvas: document.getElementById('cropCanvas'),
+  previewOverlay: document.getElementById('previewOverlay'),
+  rawOcrText: document.getElementById('rawOcrText'),
+  roiBox: document.getElementById('roiBox'),
+  boxDimensionDisplay: document.getElementById('boxDimensionDisplay'),
+  snapBtn: document.getElementById('snapBtn'),
+  retakeBtn: document.getElementById('retakeBtn'),
+  actionContainer: document.getElementById('actionContainer'),
+  retakeContainer: document.getElementById('retakeContainer'),
+  weightInput: document.getElementById('weightInput'),
+  statusMsg: document.getElementById('statusMsg'),
+  submitBtn: document.getElementById('submitBtn'),
+  successModal: document.getElementById('successModal'),
+  modalWeightValue: document.getElementById('modalWeightValue'),
+  closeModalBtn: document.getElementById('closeModalBtn')
+};
 
-    for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
+let boxWidth = 80;
+let boxHeight = 30;
+let isSnapped = false;
+let workerPromise = null;
 
-        // หาค่าความสว่างรวม (Brightness) ของพิกเซล
-        const brightness = (r + g + b) / 3;
+/* ---------------- ROI ---------------- */
+function updateRoiBoxStyle() {
+  if (isSnapped) return;
+  els.roiBox.style.width  = boxWidth  + '%';
+  els.roiBox.style.height = boxHeight + '%';
+  els.roiBox.style.left   = ((100 - boxWidth) / 2) + '%';
+  els.roiBox.style.top    = ((100 - boxHeight) / 2) + '%';
+  els.boxDimensionDisplay.textContent = `W: ${boxWidth}% | H: ${boxHeight}%`;
+}
+window.adjustBoxSize = function (type, delta) {
+  if (isSnapped) return;
+  if (type === 'w') boxWidth  = Math.min(95, Math.max(20, boxWidth + delta));
+  else              boxHeight = Math.min(60, Math.max(8,  boxHeight + delta));
+  updateRoiBoxStyle();
+};
 
-        // เช็กว่าเป็นแสงเรืองแสงของตัวเลขหรือไม่ (ตัวเลขจะสว่างเด่นกว่าพื้นหลังมืด)
-        // หรือเน้นช่องสีเขียว (สำหรับจอ A&D) และสีส้ม/แดง (สำหรับจอ Sartorius)
-        const isBrightGlow = (brightness > 80) || (g > 70) || (r > 90);
-
-        if (isBrightGlow) {
-            // ถ้าเป็นตัวเลขเรืองแสง ให้ปรับเป็น "สีดำเข้ม" (เพื่อให้ OCR มองเห็นเป็นตัวหนังสือ)
-            data[i] = 0;     
-            data[i + 1] = 0; 
-            data[i + 2] = 0; 
-        } else {
-            // ถ้าเป็นพื้นหลังมืดหรือ Noise รอบข้าง ให้ปรับเป็น "สีขาวสะอาด"
-            data[i] = 255;   
-            data[i + 1] = 255; 
-            data[i + 2] = 255; 
-        }
+/* ---------------- Camera ---------------- */
+async function initCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    els.video.srcObject = stream;
+    await els.video.play().catch(() => {});
+  } catch (err) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      els.video.srcObject = stream;
+    } catch (e) {
+      els.statusMsg.textContent = '⚠️ เปิดกล้องไม่ได้ (ต้องรันบน https:// หรือ localhost)';
     }
-    ctx.putImageData(imgData, 0, 0);
+  }
 }
 
-        async function captureAndRunOCR() {
-            const video = els.video;
-            const canvas = els.cropCanvas;
-            const ctx = canvas.getContext('2d');
+/* ---------------- Image processing ---------------- */
+// Otsu: หา threshold ที่แยกตัวเลข (สว่าง) ออกจากพื้นหลัง (มืด) แบบอัตโนมัติ
+function otsu(gray) {
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
+  const total = gray.length;
+  let sum = 0;
+  for (let t = 0; t < 256; t++) sum += t * hist[t];
 
-            if (!video.videoWidth) return;
+  let sumB = 0, wB = 0, maxVar = -1, threshold = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > maxVar) { maxVar = between; threshold = t; }
+  }
+  return threshold;
+}
 
-            const vWidth = video.videoWidth;
-            const vHeight = video.videoHeight;
+// แปลงภาพ ROI -> ขาว/ดำ (ตัวเลขดำบนพื้นขาว) พร้อมคืนค่า threshold ที่ใช้
+function preprocess(canvas) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const w = canvas.width, h = canvas.height;
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
 
-            const boxW = (boxWidth / 100) * vWidth;
-            const boxH = (boxHeight / 100) * vHeight;
-            const boxX = (vWidth - boxW) / 2;
-            const boxY = (vHeight - boxH) / 2;
+  const gray = new Uint8Array(w * h);
+  let maxV = 0;
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    // ใช้ช่องสีที่สว่างที่สุด -> จับได้ทั้ง LED เขียว / ส้ม / แดง / ขาว
+    const v = Math.max(d[i], d[i + 1], d[i + 2]);
+    gray[p] = v;
+    if (v > maxV) maxV = v;
+  }
 
-            canvas.width = boxW;
-            canvas.height = boxH;
+  if (maxV < 45) return { ok: false, maxV };            // มืดสนิท ไม่มีตัวเลข
 
-            ctx.drawImage(video, boxX, boxY, boxW, boxH, 0, 0, boxW, boxH);
+  const t  = otsu(gray);
+  const th = Math.max(t, Math.round(maxV * 0.35));      // ดัน threshold ขึ้นเพื่อตัด glow/แสงฟุ้ง
 
-            // รัน Pipeline กรองแสง LED
-            preprocessCanvas(canvas, ctx);
+  for (let i = 0, p = 0; p < gray.length; p++, i += 4) {
+    const v = gray[p] > th ? 0 : 255;                   // ตัวเลข -> ดำ, พื้นหลัง -> ขาว
+    d[i] = d[i + 1] = d[i + 2] = v;
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return { ok: true, threshold: th, maxV };
+}
 
-            els.previewOverlay.classList.remove('hidden');
-            els.previewOverlay.classList.add('flex');
-            els.rawOcrText.textContent = "⏳ กำลังถอดรหัสตัวเลขจากหน้าจอ...";
-            els.statusMsg.textContent = "🔍 กำลังประมวลผล OCR...";
+// ขยายภาพ + ใส่ขอบขาว (Tesseract แม่นขึ้นมากเมื่อตัวอักษรสูงพอและมี margin)
+function buildOcrCanvas(src) {
+  const factor = Math.min(4, Math.max(1, Math.round(900 / Math.max(1, src.width))));
+  const pad = 24;
+  const out = document.createElement('canvas');
+  out.width  = src.width  * factor + pad * 2;
+  out.height = src.height * factor + pad * 2;
+  const c = out.getContext('2d');
+  c.fillStyle = '#ffffff';
+  c.fillRect(0, 0, out.width, out.height);
+  c.imageSmoothingEnabled = false;
+  c.drawImage(src, pad, pad, src.width * factor, src.height * factor);
+  return out;
+}
 
-            try {
-                const worker = await Tesseract.createWorker('eng');
-                await worker.setParameters({
-                    tessedit_char_whitelist: '0123456789.',
-                });
-
-                const { data: { text } } = await worker.recognize(canvas);
-                await worker.terminate();
-
-                const cleanedText = text.replace(/[^0-9.]/g, '');
-                els.rawOcrText.textContent = `ค่าที่สกัดได้: "${cleanedText || 'ไม่พบตัวเลข'}"`;
-
-                if (cleanedText.includes('.')) {
-                    const parts = cleanedText.split('.');
-                    const leftPart = parts[0] || '0';
-                    const rightPart = parts[1] || '00';
-                    const reconstructed = `${leftPart}.${rightPart}`;
-                    
-                    const numericValue = Math.abs(parseFloat(reconstructed));
-                    if (!isNaN(numericValue)) {
-                        els.weightInput.value = numericValue.toFixed(rightPart.length);
-                        els.statusMsg.textContent = "✅ อ่านค่าสำเร็จ! ตรวจสอบความถูกต้อง";
-                    } else {
-                        els.statusMsg.textContent = "⚠️ อ่านค่าไม่ชัดเจน กรุณากด Retake แล้วลองใหม่";
-                    }
-                } else if (cleanedText.length > 0) {
-                    const numericValue = Math.abs(parseFloat(cleanedText));
-                    els.weightInput.value = isNaN(numericValue) ? "" : numericValue;
-                    els.statusMsg.textContent = "⚠️ ไม่พบจุดทศนิยม (.) โปรดตรวจสอบ";
-                } else {
-                    els.statusMsg.textContent = "❌ ไม่พบตัวเลขในกรอบ ลองขยับหรือปรับกรอบใหม่";
-                }
-
-            } catch (error) {
-                console.error(error);
-                els.rawOcrText.textContent = "เกิดข้อผิดพลาดในการประมวลผล";
-                els.statusMsg.textContent = "⚠️ กรุณากด Retake แล้วลองใหม่";
-            }
+/* ---------------- Tesseract worker (สร้างครั้งเดียว ใช้ซ้ำ) ---------------- */
+function getWorker() {
+  if (!workerPromise) {
+    workerPromise = (async () => {
+      const worker = await Tesseract.createWorker('eng', 1, {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            els.statusMsg.textContent = `🔍 กำลังอ่าน... ${Math.round(m.progress * 100)}%`;
+          }
         }
+      });
+      await worker.setParameters({
+        tessedit_char_whitelist: '0123456789.',
+        tessedit_pageseg_mode: '7',     // SINGLE LINE -> สำคัญมาก!
+        user_defined_dpi: '300',
+        preserve_interword_spaces: '1'
+      });
+      return worker;
+    })().catch(err => { workerPromise = null; throw err; });
+  }
+  return workerPromise;
+}
 
-        els.snapBtn.addEventListener('click', () => {
-            isSnapped = true;
-            els.video.pause();
-            els.actionContainer.classList.add('hidden');
-            els.retakeContainer.classList.remove('hidden');
-            captureAndRunOCR();
-        });
+/* ---------------- Capture ---------------- */
+async function captureAndRunOCR() {
+  const v = els.video;
+  if (!v.videoWidth || !v.videoHeight) {
+    els.statusMsg.textContent = '⚠️ กล้องยังไม่พร้อม';
+    return;
+  }
 
-        els.retakeBtn.addEventListener('click', () => {
-            isSnapped = false;
-            els.video.play();
-            els.previewOverlay.classList.add('hidden');
-            els.previewOverlay.classList.remove('flex');
-            els.retakeContainer.classList.add('hidden');
-            els.actionContainer.classList.remove('hidden');
-            els.weightInput.value = "";
-            els.statusMsg.textContent = "🔄 พร้อมถ่ายใหม่ ปรับกรอบแล้วกด Snap";
-        });
+  const vw = v.videoWidth, vh = v.videoHeight;
+  const cw = v.clientWidth, ch = v.clientHeight;
 
-        els.submitBtn.addEventListener('click', () => {
-            let rawValue = parseFloat(els.weightInput.value);
-            if (isNaN(rawValue) || rawValue <= 0) {
-                alert("กรุณาระบุค่าน้ำหนักให้ถูกต้องก่อนส่ง");
-                return;
-            }
-            const inputStr = els.weightInput.value;
-            const decimalPlaces = inputStr.includes('.') ? inputStr.split('.')[1].length : 2;
-            const finalPayloadWeight = Math.abs(rawValue).toFixed(decimalPlaces);
-            
-            els.modalWeightValue.textContent = finalPayloadWeight;
-            els.successModal.classList.remove('hidden');
-            els.successModal.classList.add('flex');
-        });
+  // ---- แปลงพิกัดกรอบบนหน้าจอ -> พิกัดจริงใน video frame (กรณี object-fit: cover) ----
+  const scale   = Math.max(cw / vw, ch / vh);
+  const offsetX = (cw - vw * scale) / 2;
+  const offsetY = (ch - vh * scale) / 2;
 
-        els.closeModalBtn.addEventListener('click', () => {
-            els.successModal.classList.add('hidden');
-            els.successModal.classList.remove('flex');
-            els.retakeBtn.click();
-        });
+  const roiWpx = cw * boxWidth  / 100;
+  const roiHpx = ch * boxHeight / 100;
+  const roiXpx = (cw - roiWpx) / 2;
+  const roiYpx = (ch - roiHpx) / 2;
 
-        updateRoiBoxStyle();
-        initCamera();
-    </script>
+  let sx = (roiXpx - offsetX) / scale;
+  let sy = (roiYpx - offsetY) / scale;
+  let sw = roiWpx / scale;
+  let sh = roiHpx / scale;
+
+  // clamp ให้อยู่ในเฟรม
+  sx = Math.max(0, Math.min(vw - 1, sx));
+  sy = Math.max(0, Math.min(vh - 1, sy));
+  sw = Math.max(1, Math.min(vw - sx, sw));
+  sh = Math.max(1, Math.min(vh - sy, sh));
+
+  const src = document.createElement('canvas');
+  src.width  = Math.round(sw);
+  src.height = Math.round(sh);
+  src.getContext('2d', { willReadFrequently: true })
+     .drawImage(v, sx, sy, sw, sh, 0, 0, src.width, src.height);
+
+  // ---- ประมวลผล ----
+  const info = preprocess(src);
+  const ocrCanvas = buildOcrCanvas(src);
+
+  // แสดง preview ว่า Tesseract เห็นอะไร
+  els.cropCanvas.width  = ocrCanvas.width;
+  els.cropCanvas.height = ocrCanvas.height;
+  els.cropCanvas.getContext('2d').drawImage(ocrCanvas, 0, 0);
+  els.previewOverlay.classList.remove('hidden');
+  els.previewOverlay.classList.add('flex');
+
+  if (!info.ok) {
+    els.rawOcrText.textContent = 'ภาพมืดเกินไป / ไม่พบแสง LED';
+    els.statusMsg.textContent  = '❌ ไม่เห็นตัวเลข ลองขยับกล้องหรือปรับแสง';
+    return;
+  }
+
+  els.rawOcrText.textContent = `threshold=${info.threshold} | กำลังอ่าน...`;
+  els.statusMsg.textContent  = '🔍 กำลังประมวลผล OCR...';
+
+  try {
+    const worker = await getWorker();
+    const { data: { text } } = await worker.recognize(ocrCanvas);
+
+    els.rawOcrText.textContent = `RAW: "${(text || '').trim()}"`;
+
+    // ---- parse ----
+    let s = (text || '').replace(/[^0-9.]/g, '');
+    const firstDot = s.indexOf('.');
+    if (firstDot !== -1) {
+      s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, '');
+    }
+
+    if (s && !isNaN(parseFloat(s))) {
+      els.weightInput.value = s;
+      els.statusMsg.textContent = '✅ อ่านค่าสำเร็จ! ตรวจสอบความถูกต้องอีกครั้ง';
+    } else {
+      els.statusMsg.textContent = '❌ ไม่พบตัวเลขในกรอบ ลองขยับ/ปรับกรอบ/ปรับแสง';
+    }
+  } catch (error) {
+    console.error(error);
+    els.rawOcrText.textContent = 'ERROR: ' + (error && error.message ? error.message : error);
+    els.statusMsg.textContent  = '⚠️ โหลด Tesseract ไม่สำเร็จ (ตรวจสอบอินเทอร์เน็ต)';
+  }
+}
+
+/* ---------------- Events ---------------- */
+els.snapBtn.addEventListener('click', () => {
+  isSnapped = true;
+  els.video.pause();
+  els.actionContainer.classList.add('hidden');
+  els.retakeContainer.classList.remove('hidden');
+  captureAndRunOCR();
+});
+
+els.retakeBtn.addEventListener('click', () => {
+  isSnapped = false;
+  els.video.play().catch(() => {});
+  els.previewOverlay.classList.add('hidden');
+  els.previewOverlay.classList.remove('flex');
+  els.retakeContainer.classList.add('hidden');
+  els.actionContainer.classList.remove('hidden');
+  els.weightInput.value = '';
+  els.statusMsg.textContent = '🔄 พร้อมถ่ายใหม่';
+});
+
+els.submitBtn.addEventListener('click', () => {
+  const rawValue = parseFloat(els.weightInput.value);
+  if (isNaN(rawValue) || rawValue <= 0) { alert('กรุณาระบุค่าน้ำหนักให้ถูกต้อง'); return; }
+  const str = els.weightInput.value;
+  const dp = str.includes('.') ? str.split('.')[1].length : 2;
+  els.modalWeightValue.textContent = Math.abs(rawValue).toFixed(dp);
+  els.successModal.classList.remove('hidden');
+  els.successModal.classList.add('flex');
+});
+
+els.closeModalBtn.addEventListener('click', () => {
+  els.successModal.classList.add('hidden');
+  els.successModal.classList.remove('flex');
+  els.retakeBtn.click();
+});
+
+updateRoiBoxStyle();
+initCamera();
+</script>
 </body>
 </html>
